@@ -85,7 +85,7 @@ function App() {
               />
               <Route path="/wishlist" element={<WishlistPage />} />
               <Route path="/search" element={<SearchResultPage />} />
-              <Route path="/tourist/:id" element={<TouristDetailPage />} />
+              <Route path="/tourist/:touristId" element={<TouristDetailPage />} />
             </Routes>
           </BrowserRouter>
         </WishlistProvider>

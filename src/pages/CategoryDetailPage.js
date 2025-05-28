@@ -2,19 +2,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Typography, Box, Pagination, Button } from '@mui/material';
-import { categoriesData } from '../data/categoriesData'; // Ensure this path is correct
-import SubCategoryTags from '../components/SubCategoryTags'; // Assuming this component exists
-import TouristList from '../components/TouristList'; // Assuming this component exists
+import { categoriesData } from '../data/categoriesData';
+import allTouristSpotsData from '../data/touristData'; // 모든 관광지 데이터를 가져옵니다.
+import SubCategoryTags from '../components/SubCategoryTags';
+import TouristList from '../components/TouristList';
+// useWishlist는 CategoryDetailPage에서 직접 사용하지 않으므로 임포트 제거 (TouristList 내부에서 사용)
 
 const ITEMS_PER_PAGE = 10;
+// WISHLIST_STORAGE_KEY와 wishlist, toggleWishlist 상태는 WishlistContext로 이동했으므로 제거
 
-const CategoryDetailPage = ({ onSelectSubCategory }) => { // onSelectSubCategory is kept from App.js
+const CategoryDetailPage = ({ onSelectSubCategory }) => {
   const { categoryLabelFromUrl } = useParams();
   const navigate = useNavigate();
 
-  const currentCategoryLabel = useMemo(() => 
+  const currentCategoryLabel = useMemo(() =>
     categoryLabelFromUrl ? decodeURIComponent(categoryLabelFromUrl) : undefined
-  , [categoryLabelFromUrl]);
+    , [categoryLabelFromUrl]);
 
   const [category, setCategory] = useState(null);
   const [subCategories, setSubCategories] = useState([]);
@@ -22,68 +25,56 @@ const CategoryDetailPage = ({ onSelectSubCategory }) => { // onSelectSubCategory
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Sample tourist data - In a real app, this would likely be fetched
-  // or be more structured, perhaps associated with categoriesData.
-  const allTouristData = useMemo(() => [
-    ...Array.from({ length: 27 }).map((_, i) => ({
-      id: i + 1,
-      title: `관광지 ${i + 1}`,
-      location: '서울특별시',
-      description: '아름다운 명소입니다',
-      image: `/api/placeholder/400/200?text=관광지${i + 1}`,
-      tags: ['가을', '드라이브'],
-      // This subCategory assignment is for example purposes.
-      // It should align with actual subCategory labels in categoriesData.
-      subCategory: categoriesData[0]?.subCategories[(i % (categoriesData[0]?.subCategories.length || 1))]?.label || (i % 2 === 0 ? '해변' : '산/계곡'),
-      // Ideally, items might also have a parentCategory label to ensure correct filtering.
-      parentCategory: categoriesData[0]?.label // Example: associate with the first main category
-    })),
-  ], []); // Empty dependency array means this runs once. Be careful if categoriesData can change.
-
+  // allTouristSpotsData 객체를 배열로 변환하여 사용합니다.
+  const allTouristDataArray = useMemo(() => Object.values(allTouristSpotsData), []);
 
   useEffect(() => {
-    setIsLoading(true);
-    if (currentCategoryLabel) {
-      const foundCategory = categoriesData.find(c => c.label === currentCategoryLabel);
-      if (foundCategory) {
-        setCategory(foundCategory);
-        setSubCategories(foundCategory.subCategories || []);
-        setSelectedSubCategory('전체'); // Reset subcategory selection
-        setCurrentPage(1); // Reset page
+  setIsLoading(true);
+  if (currentCategoryLabel) {
+    const foundCategory = categoriesData.find(c => c.label === currentCategoryLabel);
+    if (foundCategory) {
+      setCategory(foundCategory);
+      const existingSubCategories = foundCategory.subCategories || [];
+      const hasAllCategory = existingSubCategories.some(sub => sub.label === '전체');
+      let updatedSubCategories = [];
+      if (!hasAllCategory) {
+        updatedSubCategories = [{ label: '전체', value: 'all' }, ...existingSubCategories];
       } else {
-        setCategory(null); // Category not found
-        setSubCategories([]);
-        console.warn(`Category with label "${currentCategoryLabel}" not found.`);
+        updatedSubCategories = existingSubCategories;
       }
+      setSubCategories(updatedSubCategories);
+      setSelectedSubCategory('전체');
+      setCurrentPage(1);
     } else {
-      setCategory(null); // No category label in URL
+      setCategory(null);
       setSubCategories([]);
+      console.warn(`레이블 "${currentCategoryLabel}"을 가진 카테고리를 찾을 수 없습니다.`);
     }
-    setIsLoading(false);
-  }, [currentCategoryLabel]);
+  } else {
+    setCategory(null);
+    setSubCategories([]);
+  }
+  setIsLoading(false);
+}, [currentCategoryLabel]);
+  
 
   const filteredTouristData = useMemo(() => {
     if (!category) return [];
 
-    // Filter allTouristData to include only items relevant to the current main category
-    // This is a simplified assumption; real data might be structured differently or fetched per category.
-    const itemsForMainCategory = allTouristData.filter(item => {
-        // A more robust filter might be needed if `allTouristData` contains items from many main categories.
-        // For example, if item.parentCategory === category.label
-        // For now, we assume `subCategories.some(...)` check is sufficient if subcategories are unique enough
-        // or `allTouristData` is already somewhat pre-filtered or meant for this broad use.
-        return true; // Assuming items are generally relevant or filtered later by subCategory
-    });
-
+    // 현재 선택된 메인 카테고리에 속하는 관광지 필터링 (parentCategory 속성 활용)
+    const itemsForMainCategory = allTouristDataArray.filter(item =>
+      item.parentCategory === category.label
+    );
 
     if (selectedSubCategory === '전체') {
-      // Show items whose subCategory is one of the valid subCategories for the current main category
-      return itemsForMainCategory.filter(item => 
+      // '전체' 선택 시, 해당 메인 카테고리에 속하는 모든 서브카테고리 항목 포함
+      return itemsForMainCategory.filter(item =>
         subCategories.some(sc => sc.label === item.subCategory)
       );
     }
+    // 특정 서브카테고리 선택 시, 해당 서브카테고리 항목만 필터링
     return itemsForMainCategory.filter(item => item.subCategory === selectedSubCategory);
-  }, [category, selectedSubCategory, subCategories, allTouristData]);
+  }, [category, selectedSubCategory, subCategories, allTouristDataArray]); // 의존성 배열에 allTouristDataArray 추가
 
   const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentItemsOnPage = filteredTouristData.slice(startIdx, startIdx + ITEMS_PER_PAGE);
@@ -97,8 +88,8 @@ const CategoryDetailPage = ({ onSelectSubCategory }) => { // onSelectSubCategory
   const handleSubCategorySelect = (label) => {
     setSelectedSubCategory(label);
     setCurrentPage(1);
-    if (onSelectSubCategory) { // Call the prop from App.js if it exists
-        onSelectSubCategory(label);
+    if (onSelectSubCategory) {
+      onSelectSubCategory(label);
     }
   };
 
@@ -129,12 +120,9 @@ const CategoryDetailPage = ({ onSelectSubCategory }) => { // onSelectSubCategory
         onSelect={handleSubCategorySelect}
       />
 
+      {/* TouristList에 items만 전달하고, 위시리스트 관련 로직은 TouristList 내부에서 useWishlist 훅으로 처리 */}
       <TouristList
         items={currentItemsOnPage}
-        // Props required by TouristList might need adjustment based on its actual implementation
-        // totalCount={filteredTouristData.length} 
-        // currentPage={currentPage}
-        // itemsPerPage={ITEMS_PER_PAGE}
       />
 
       {totalPages > 0 && (

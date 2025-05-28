@@ -385,3 +385,60 @@
   color: #1e88e5;
   font-style: italic;
 }
+.infoItem {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.infoLabel {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.infoInput,
+.infoSelect {
+  padding: 10px 14px;
+  font-size: 15px;
+  border: 1.5px solid #ccc;
+  border-radius: 10px;
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.infoInput:focus,
+.infoSelect:focus {
+  border-color: #4a90e2;
+  outline: none;
+  box-shadow: 0 0 5px rgba(74, 144, 226, 0.3);
+}
+
+.durationControl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.durationButton {
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  font-size: 18px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.durationButton:hover {
+  background-color: #e0e0e0;
+}
+
+.durationValue {
+  font-size: 16px;
+  font-weight: bold;
+  min-width: 20px;
+  text-align: center;
+}

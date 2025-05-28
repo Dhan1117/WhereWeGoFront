@@ -1,32 +1,37 @@
-// src/components/Header.js
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   AppBar, Toolbar, Typography, IconButton, Box, Drawer, List, ListItem,
-  ListItemIcon, ListItemText, Divider, Avatar, TextField, InputAdornment, Button, Image
+  ListItemIcon, ListItemText, Divider, Avatar, TextField, InputAdornment, Button
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/Search';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import PublicIcon from '@mui/icons-material/Public';
-import TerrainIcon from '@mui/icons-material/Terrain';
-import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import CelebrationIcon from '@mui/icons-material/Celebration';
-import CottageIcon from '@mui/icons-material/Cottage';
-import ParkIcon from '@mui/icons-material/Park';
+// 새로운 카테고리 아이콘 임포트
+import PaletteIcon from '@mui/icons-material/Palette'; // 문화·예술
+import MovieIcon from '@mui/icons-material/Movie'; // 영화·체험
+import NatureIcon from '@mui/icons-material/Nature'; // 자연·생태
+import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk'; // 트레킹·산책
+import WavesIcon from '@mui/icons-material/Waves'; // 해양·수상
+import AttractionsIcon from '@mui/icons-material/Attractions'; // 테마·관광시설
+import ShoppingBagIcon from '@mui/icons-material/ShoppingBag'; // 상업·소비
+import PetsIcon from '@mui/icons-material/Pets'; // 동물 관련
+import AcUnitIcon from '@mui/icons-material/AcUnit'; // 계절형 체험
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import CloseIcon from '@mui/icons-material/Close';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './Header.scss';
 import { SearchContext } from '../SearchContext';
-import logoImage from '../assets/Logo.png';
+import axios from 'axios'; // axios 임포트 추가
+
 
 const Header = ({ onSelectCategory = () => { } }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  // **추가:** 사용자 정보 상태
+  const [user, setUser] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -68,15 +73,69 @@ const Header = ({ onSelectCategory = () => { } }) => {
     setIsDropdownOpen(false);
   }, [location.pathname]);
 
+  // **추가:** 사용자 정보 가져오는 useEffect
+  useEffect(() => {
+  const fetchUser = async () => {
+    try {
+      // axios 인스턴스 생성 또는 공통 apiClient 사용
+      // 여기서는 간단히 axios.get 사용 예시 (process.env.REACT_APP_API_PREFIX 설정 가정)
+      const response = await axios.get(`${process.env.REACT_APP_API_PREFIX}/auth/me`, {
+        withCredentials: true // JWT 쿠키를 포함하여 요청
+      });
+      // if (response.ok) { // axios는 응답이 성공적이면 바로 data를 반환합니다.
+      //   const userData = await response.json();
+      //   setUser(userData);
+      // }
+      setUser(response.data); // axios는 응답 객체 안에 data 속성으로 JSON을 반환
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        console.log("사용자가 로그인되지 않았습니다 (401).");
+        setUser(null); // 401 에러 시 사용자 없음으로 처리
+      } else {
+        console.error("사용자 정보 조회 실패:", error);
+        setUser(null);
+      }
+    }
+  };
+  fetchUser();
+}, []);
+
+  // **추가:** 구글 로그인 핸들러
+  const handleGoogleLogin = () => {
+    // 백엔드 API의 기본 URL (예: http://localhost:8000/api/v1)
+    const BACKEND_BASE_URL = process.env.REACT_APP_API_PREFIX || "http://localhost:8000/api/v1";
+    window.location.href = `${BACKEND_BASE_URL}/auth/google/login`;
+};
+  // **추가:** 로그아웃 핸들러
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+      });
+      if (response.ok) {
+        setUser(null); // 사용자 상태 초기화
+        navigate('/'); // 로그아웃 후 홈으로 리디렉션
+      } else {
+        console.error("Logout failed.");
+      }
+    } catch (error) {
+      console.error("Error during logout:", error);
+    }
+  };
+
+  // 새로운 카테고리 목록 정의
   const categoryList = [
-    { label: '자연/해변', icon: <TerrainIcon /> },
-    { label: '역사/문화유산', icon: <AccountBalanceIcon /> },
-    { label: '랜드마크', icon: <LocationOnIcon /> },
-    { label: '체험 관광', icon: <EmojiEventsIcon /> },
-    { label: '축제/이벤트', icon: <CelebrationIcon /> },
-    { label: '전통 마을', icon: <CottageIcon /> },
-    { label: '공원/정원', icon: <ParkIcon /> },
+    { label: '문화·예술', icon: <PaletteIcon /> },
+    { label: '영화·체험', icon: <MovieIcon /> },
+    { label: '자연·생태', icon: <NatureIcon /> },
+    { label: '트레킹·산책', icon: <DirectionsWalkIcon /> },
+    { label: '해양·수상', icon: <WavesIcon /> },
+    { label: '테마·관광시설', icon: <AttractionsIcon /> },
+    { label: '상업·소비', icon: <ShoppingBagIcon /> },
+    { label: '동물 관련', icon: <PetsIcon /> },
+    { label: '계절형 체험', icon: <AcUnitIcon /> },
   ];
+
 
   const serviceList = [
     { label: '추천 코스', icon: <StarBorderIcon /> },
@@ -92,6 +151,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
 
   const renderSearchDropdown = () => {
     if (!isDropdownOpen) return null;
+
     console.log('[Header] Rendering 통합된 검색 드롭다운. Recent searches:', recentSearches, 'Live keywords:', liveKeywords);
 
     return (
@@ -137,6 +197,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
             {liveKeywords.map((keyword, index) => (
               <Box
                 key={`live-${index}-${keyword}`}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => handleSpotSelect(keyword)}
                 sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', cursor: 'pointer', '&:hover': { backgroundColor: '#f0f0f0' } }}
               >
@@ -162,27 +223,27 @@ const Header = ({ onSelectCategory = () => { } }) => {
   return (
     <>
       <AppBar position="fixed" className="header" sx={{ backgroundColor: '#fff', color: '#000' }}>
-  <Toolbar className="header__toolbar" sx={{ height: '100px' }}> {/* Toolbar 높이 늘림 */}
-    <Box className="header__left" sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-      <IconButton edge="start" className="header__icon-button" onClick={toggleDrawer(true)} sx={{ color: '#000' }}>
-        <MenuIcon />
-      </IconButton>
+        <Toolbar className="header__toolbar" sx={{ height: '100px' }}>
+          <Box className="header__left" sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <IconButton edge="start" className="header__icon-button" onClick={toggleDrawer(true)} sx={{ color: '#000' }}>
+              <MenuIcon />
+            </IconButton>
 
-      <Box
-        onClick={() => navigate('/')}
-        sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', ml: 1, height: '100%' }}
-      >
-        <img
-          src="/WhereWeGo.PNG"
-          alt="Where We Go 로고"
-          style={{
-            height: '80px', // 2배로 키움
-            width: '120px', // 3배로 키움
-            objectFit: 'contain',
-          }}
-        />
-      </Box>
-    </Box>
+            <Box
+              onClick={() => navigate('/')}
+              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', ml: 1, height: '100%' }}
+            >
+              <img
+                src="/WhereWeGo.PNG"
+                alt="Where We Go 로고"
+                style={{
+                  height: '80px',
+                  width: '120px',
+                  objectFit: 'contain',
+                }}
+              />
+            </Box>
+          </Box>
 
           <Box className="header__center" sx={{ flex: 1, display: 'flex', justifyContent: 'center', position: 'relative' }}>
             <TextField
@@ -217,7 +278,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
                     borderColor: '#aaa',
                   },
                   '&.Mui-focused fieldset': {
-                    borderColor: theme => theme.palette.primary.main,
+                    borderColor: (theme) => theme.palette.primary.main,
                   },
                 },
                 '& .MuiInputBase-input': {
@@ -225,13 +286,22 @@ const Header = ({ onSelectCategory = () => { } }) => {
                 }
               }}
             />
-            {renderSearchDropdown()} {/* 조건 제거 */}
+            {isDropdownOpen && renderSearchDropdown()}
           </Box>
 
           <Box className="header__right">
             <IconButton className="header__icon-button" sx={{ color: '#000' }}><PublicIcon /></IconButton>
             <IconButton className="header__icon-button" onClick={() => navigate('/wishlist')} sx={{ color: '#000' }}><FavoriteBorderIcon /></IconButton>
-            <IconButton className="header__icon-button" sx={{ color: '#000' }}><PersonOutlineIcon /></IconButton>
+            {/* **수정:** 로그인 상태에 따라 아이콘 변경 */}
+            {user ? (
+              <IconButton className="header__icon-button" sx={{ color: '#000' }} onClick={toggleDrawer(true)}>
+                <Avatar src={user.picture} alt={user.name} />
+              </IconButton>
+            ) : (
+              <IconButton className="header__icon-button" sx={{ color: '#000' }} onClick={handleGoogleLogin}>
+                <PersonOutlineIcon />
+              </IconButton>
+            )}
           </Box>
         </Toolbar>
       </AppBar>
@@ -239,8 +309,20 @@ const Header = ({ onSelectCategory = () => { } }) => {
       <Drawer anchor="left" open={drawerOpen} onClose={toggleDrawer(false)}>
         <Box sx={{ width: 250, color: '#000' }} role="presentation" onKeyDown={toggleDrawer(false)}>
           <Box sx={{ display: 'flex', alignItems: 'center', padding: '16px' }}>
-            <Avatar sx={{ marginRight: '8px', backgroundColor: '#ccc' }} />
-            <Typography variant="body1">로그인</Typography>
+            {/* **수정:** 로그인 상태에 따라 아바타 및 로그인/로그아웃 표시 */}
+            {user ? (
+              <>
+                <Avatar src={user.picture} alt={user.name} sx={{ marginRight: '8px' }} />
+                <Typography variant="body1">{user.name}</Typography>
+                <Button onClick={handleLogout} sx={{ ml: 'auto' }}>로그아웃</Button>
+              </>
+            ) : (
+              <>
+                <Avatar sx={{ marginRight: '8px', backgroundColor: '#ccc' }} />
+                <Typography variant="body1">로그인</Typography>
+                <Button onClick={handleGoogleLogin} sx={{ ml: 'auto' }}>구글 로그인</Button>
+              </>
+            )}
           </Box>
           <Divider />
           <Typography variant="subtitle1" sx={{ p: 2 }}>카테고리</Typography>
@@ -252,7 +334,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
                 onClick={() => {
                   setDrawerOpen(false);
                   onSelectCategory(item.label);
-                  navigate('/category');
+                  navigate(`/category/${encodeURIComponent(item.label)}`);
                 }}
                 sx={{ px: 2, py: 1, cursor: 'pointer', '&:hover': { backgroundColor: '#f0f0f0' } }}
               >

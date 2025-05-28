@@ -1,10 +1,6 @@
-// src/contexts/WishlistContext.js
-import React, { createContext, useState, useEffect, useContext }
-from 'react';
-
-// touristDetails 객체를 불러옵니다. 경로가 다를 경우 수정해주세요.
-// 실제로는 API 호출이나 중앙 데이터 저장소에서 가져올 수 있습니다.
-import { touristDetails } from '../pages/TouristDetailPage'; // 경로 주의!
+// src/contexts/WishlistContext.js (이전 답변과 동일하게 유지)
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import allTouristSpotsData from '../data/touristData'; // 모든 관광지 데이터를 가져옵니다.
 
 export const WishlistContext = createContext();
 
@@ -36,12 +32,11 @@ export const WishlistProvider = ({ children }) => {
     return wishlistIds.includes(itemId);
   };
 
-  // ID 배열을 기반으로 실제 관광지 객체 배열을 만듭니다.
-  const wishlistItems = wishlistIds.map(id => touristDetails[id]).filter(item => item); // ID에 해당하는 아이템이 없을 경우 필터링
+  const wishlistItems = wishlistIds.map(id => allTouristSpotsData[id]).filter(item => item);
 
   const value = {
-    wishlistItems, // 실제 아이템 객체 배열
-    wishlistIds,   // 아이템 ID 배열
+    wishlistItems,
+    wishlistIds,
     addToWishlist,
     removeFromWishlist,
     isWishlisted,
