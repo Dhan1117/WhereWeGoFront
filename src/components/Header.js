@@ -349,7 +349,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
             {serviceList.map((item) => (
               <ListItem
                 button
-                key={item.label}
+                key={item.label}  
                 onClick={toggleDrawer(false)}
                 sx={{ px: 2, py: 1, cursor: 'pointer', '&:hover': { backgroundColor: '#f0f0f0' } }}
               >
@@ -364,4 +364,4 @@ const Header = ({ onSelectCategory = () => { } }) => {
   );
 };
 
-export default Header;
+export default Header       ;

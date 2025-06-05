@@ -12,7 +12,7 @@ import WishlistPage from './pages/WishlistPage';
 import { SearchProvider } from './SearchContext'; // 실제 SearchContext 경로로 수정 필요
 import SurveyPage from './pages/SurveyPage';
 import TouristDetailPage from './pages/TouristDetailPage';
-
+import TravelPlanPage from './pages/TravelPlanPage';
 import { WishlistProvider } from './contexts/WishlistContext'; // 경로 확인
 
 const theme = createTheme({
@@ -83,9 +83,11 @@ function App() {
                   />
                 }
               />
+              
               <Route path="/wishlist" element={<WishlistPage />} />
               <Route path="/search" element={<SearchResultPage />} />
               <Route path="/tourist/:touristId" element={<TouristDetailPage />} />
+              <Route path="/busan-travel-plan" element={<TravelPlanPage />} />
             </Routes>
           </BrowserRouter>
         </WishlistProvider>
