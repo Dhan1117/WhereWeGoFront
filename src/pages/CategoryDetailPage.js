@@ -1,80 +1,88 @@
-// src/pages/CategoryDetailPage.js
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Typography, Box, Pagination, Button } from '@mui/material';
 import { categoriesData } from '../data/categoriesData';
-import allTouristSpotsData from '../data/touristData'; // 모든 관광지 데이터를 가져옵니다.
 import SubCategoryTags from '../components/SubCategoryTags';
 import TouristList from '../components/TouristList';
-// useWishlist는 CategoryDetailPage에서 직접 사용하지 않으므로 임포트 제거 (TouristList 내부에서 사용)
 
 const ITEMS_PER_PAGE = 10;
-// WISHLIST_STORAGE_KEY와 wishlist, toggleWishlist 상태는 WishlistContext로 이동했으므로 제거
 
 const CategoryDetailPage = ({ onSelectSubCategory }) => {
   const { categoryLabelFromUrl } = useParams();
   const navigate = useNavigate();
 
   const currentCategoryLabel = useMemo(() =>
-    categoryLabelFromUrl ? decodeURIComponent(categoryLabelFromUrl) : undefined
-    , [categoryLabelFromUrl]);
+    categoryLabelFromUrl ? decodeURIComponent(categoryLabelFromUrl) : undefined,
+    [categoryLabelFromUrl]
+  );
 
   const [category, setCategory] = useState(null);
   const [subCategories, setSubCategories] = useState([]);
   const [selectedSubCategory, setSelectedSubCategory] = useState('전체');
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [touristData, setTouristData] = useState([]);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // allTouristSpotsData 객체를 배열로 변환하여 사용합니다.
-  const allTouristDataArray = useMemo(() => Object.values(allTouristSpotsData), []);
-
+  // 백엔드에서 데이터 불러오기
   useEffect(() => {
-  setIsLoading(true);
-  if (currentCategoryLabel) {
-    const foundCategory = categoriesData.find(c => c.label === currentCategoryLabel);
-    if (foundCategory) {
-      setCategory(foundCategory);
-      const existingSubCategories = foundCategory.subCategories || [];
-      const hasAllCategory = existingSubCategories.some(sub => sub.label === '전체');
-      let updatedSubCategories = [];
-      if (!hasAllCategory) {
-        updatedSubCategories = [{ label: '전체', value: 'all' }, ...existingSubCategories];
-      } else {
-        updatedSubCategories = existingSubCategories;
+    const fetchTouristData = async () => {
+      try {
+        const response = await fetch('/api/tourist_spots');
+        if (!response.ok) throw new Error('데이터 로드 실패');
+        const data = await response.json();
+        setTouristData(Object.values(data));
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setIsDataLoading(false);
       }
-      setSubCategories(updatedSubCategories);
-      setSelectedSubCategory('전체');
-      setCurrentPage(1);
+    };
+    fetchTouristData();
+  }, []);
+
+  // 카테고리 및 서브카테고리 설정
+  useEffect(() => {
+    setIsLoading(true);
+    if (currentCategoryLabel) {
+      const foundCategory = categoriesData.find(c => c.label === currentCategoryLabel);
+      if (foundCategory) {
+        setCategory(foundCategory);
+        const existingSubCategories = foundCategory.subCategories || [];
+        const hasAllCategory = existingSubCategories.some(sub => sub.label === '전체');
+        let updatedSubCategories = [];
+        if (!hasAllCategory) {
+          updatedSubCategories = [{ label: '전체', value: 'all' }, ...existingSubCategories];
+        } else {
+          updatedSubCategories = existingSubCategories;
+        }
+        setSubCategories(updatedSubCategories);
+        setSelectedSubCategory('전체');
+        setCurrentPage(1);
+      } else {
+        setCategory(null);
+        setSubCategories([]);
+        console.warn(`레이블 "${currentCategoryLabel}"을 가진 카테고리를 찾을 수 없습니다.`);
+      }
     } else {
       setCategory(null);
       setSubCategories([]);
-      console.warn(`레이블 "${currentCategoryLabel}"을 가진 카테고리를 찾을 수 없습니다.`);
     }
-  } else {
-    setCategory(null);
-    setSubCategories([]);
-  }
-  setIsLoading(false);
-}, [currentCategoryLabel]);
-  
+    setIsLoading(false);
+  }, [currentCategoryLabel]);
 
+  // 필터링 로직
   const filteredTouristData = useMemo(() => {
     if (!category) return [];
-
-    // 현재 선택된 메인 카테고리에 속하는 관광지 필터링 (parentCategory 속성 활용)
-    const itemsForMainCategory = allTouristDataArray.filter(item =>
+    const itemsForMainCategory = touristData.filter(item => 
       item.parentCategory === category.label
     );
-
     if (selectedSubCategory === '전체') {
-      // '전체' 선택 시, 해당 메인 카테고리에 속하는 모든 서브카테고리 항목 포함
-      return itemsForMainCategory.filter(item =>
-        subCategories.some(sc => sc.label === item.subCategory)
-      );
+      return itemsForMainCategory;
     }
-    // 특정 서브카테고리 선택 시, 해당 서브카테고리 항목만 필터링
     return itemsForMainCategory.filter(item => item.subCategory === selectedSubCategory);
-  }, [category, selectedSubCategory, subCategories, allTouristDataArray]); // 의존성 배열에 allTouristDataArray 추가
+  }, [category, selectedSubCategory, touristData]);
 
   const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentItemsOnPage = filteredTouristData.slice(startIdx, startIdx + ITEMS_PER_PAGE);
@@ -93,8 +101,21 @@ const CategoryDetailPage = ({ onSelectSubCategory }) => {
     }
   };
 
-  if (isLoading) {
-    return <Container maxWidth="md" sx={{ py: 6 }}><Typography>카테고리 정보를 불러오는 중...</Typography></Container>;
+  // 로딩 및 에러 처리
+  if (isLoading || isDataLoading) {
+    return (
+      <Container maxWidth="md" sx={{ py: 6 }}>
+        <Typography>데이터 로드 중...</Typography>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="md" sx={{ py: 6, textAlign: 'center' }}>
+        <Typography color="error">오류 발생: {error}</Typography>
+      </Container>
+    );
   }
 
   if (!category) {
@@ -120,7 +141,6 @@ const CategoryDetailPage = ({ onSelectSubCategory }) => {
         onSelect={handleSubCategorySelect}
       />
 
-      {/* TouristList에 items만 전달하고, 위시리스트 관련 로직은 TouristList 내부에서 useWishlist 훅으로 처리 */}
       <TouristList
         items={currentItemsOnPage}
       />

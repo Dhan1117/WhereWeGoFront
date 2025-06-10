@@ -2,11 +2,11 @@ import React from 'react';
 import { Box, Chip } from '@mui/material';
 
 const SubCategoryTags = ({ subCategories, selected, onSelect }) => {
-  const allSubCategories = [{ label: '전체' }, ...subCategories];
-
+  // '전체' 태그를 추가하는 로직을 제거하고, props로 받은 배열을 그대로 사용합니다.
   return (
     <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', py: 2 }}>
-      {allSubCategories.map((sub) => (
+      {/* 'allSubCategories' 대신 'subCategories'를 직접 매핑합니다. */}
+      {subCategories.map((sub) => (
         <Chip
           key={sub.label}
           label={sub.label}

@@ -102,7 +102,6 @@ const Header = ({ onSelectCategory = () => { } }) => {
 
   // **추가:** 구글 로그인 핸들러
   const handleGoogleLogin = () => {
-    // 백엔드 API의 기본 URL (예: http://localhost:8000/api/v1)
     const BACKEND_BASE_URL = process.env.REACT_APP_API_PREFIX || "http://localhost:8000/api/v1";
     window.location.href = `${BACKEND_BASE_URL}/auth/google/login`;
 };
