@@ -13,7 +13,7 @@ import PaletteIcon from '@mui/icons-material/Palette'; // 문화·예술
 import MovieIcon from '@mui/icons-material/Movie'; // 영화·체험
 import NatureIcon from '@mui/icons-material/Nature'; // 자연·생태
 import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk'; // 트레킹·산책
-import WavesIcon from '@mui/icons-material/Waves'; // 해양·수상
+import WavesIcon from '@mui/icons-material/Waves'; // 해양·수상 (올바른 임포트 경로)
 import AttractionsIcon from '@mui/icons-material/Attractions'; // 테마·관광시설
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag'; // 상업·소비
 import PetsIcon from '@mui/icons-material/Pets'; // 동물 관련
@@ -22,7 +22,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import CloseIcon from '@mui/icons-material/Close';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './Header.scss';
-import { SearchContext } from '../SearchContext';
+import { SearchContext } from '../SearchContext'; // SearchContext가 정상적으로 임포트되는지 확인
 import axios from 'axios'; // axios 임포트 추가
 
 
@@ -30,7 +30,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  // **추가:** 사용자 정보 상태
+  // 사용자 정보 상태
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -73,52 +73,64 @@ const Header = ({ onSelectCategory = () => { } }) => {
     setIsDropdownOpen(false);
   }, [location.pathname]);
 
-  // **추가:** 사용자 정보 가져오는 useEffect
+  // 사용자 정보 가져오는 useEffect
   useEffect(() => {
-  const fetchUser = async () => {
-    try {
-      // axios 인스턴스 생성 또는 공통 apiClient 사용
-      // 여기서는 간단히 axios.get 사용 예시 (process.env.REACT_APP_API_PREFIX 설정 가정)
-      const response = await axios.get(`${process.env.REACT_APP_API_PREFIX}/auth/me`, {
-        withCredentials: true // JWT 쿠키를 포함하여 요청
-      });
-      // if (response.ok) { // axios는 응답이 성공적이면 바로 data를 반환합니다.
-      //   const userData = await response.json();
-      //   setUser(userData);
-      // }
-      setUser(response.data); // axios는 응답 객체 안에 data 속성으로 JSON을 반환
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        console.log("사용자가 로그인되지 않았습니다 (401).");
-        setUser(null); // 401 에러 시 사용자 없음으로 처리
-      } else {
-        console.error("사용자 정보 조회 실패:", error);
-        setUser(null);
-      }
-    }
-  };
-  fetchUser();
-}, []);
+    const fetchUser = async () => {
+      try {
+        // .env의 REACT_APP_API_PREFIX가 "http://localhost:8000" 이라고 가정
+        const BACKEND_BASE_URL = process.env.REACT_APP_API_PREFIX || "http://localhost:8000";
 
-  // **추가:** 구글 로그인 핸들러
+        // 백엔드 문서에 따라 "/api/v1/me" 엔드포인트 호출
+        // main.py에서 google_login_router의 prefix가 "/api/v1"이고
+        // google_login_router.py에 @router.get("/me") 라면 이 URL이 맞습니다.
+        const response = await axios.get(`${BACKEND_BASE_URL}/api/v1/me`, {
+          withCredentials: true // JWT 쿠키를 포함하여 요청
+        });
+        setUser(response.data); // axios는 응답 객체 안에 data 속성으로 JSON을 반환
+        console.log('사용자 정보 조회 성공:', response.data);
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          console.log("사용자가 로그인되지 않았습니다 (401).");
+          setUser(null); // 401 에러 시 사용자 없음으로 처리
+        } else {
+          console.error("사용자 정보 조회 실패:", error);
+          setUser(null);
+        }
+      }
+    };
+    fetchUser();
+  }, []); // 빈 배열: 컴포넌트가 처음 마운트될 때 한 번만 실행
+
+  // 구글 로그인 핸들러
   const handleGoogleLogin = () => {
-    const BACKEND_BASE_URL = process.env.REACT_APP_API_PREFIX || "http://localhost:8000/api/v1";
-    window.location.href = `${BACKEND_BASE_URL}/auth/google/login`;
-};
-  // **추가:** 로그아웃 핸들러
+    // .env의 REACT_APP_API_PREFIX가 "http://localhost:8000" 이라고 가정
+    const BACKEND_BASE_URL = process.env.REACT_APP_API_PREFIX || "http://localhost:8000";
+
+    // main.py에서 google_login_router의 prefix가 "/api/v1"이고
+    // google_login_router.py에 @router.get("/auth/google/login") 이라면,
+    // 최종 URL은 'http://localhost:8000/api/v1/auth/google/login'이 되어야 합니다.
+    window.location.href = `${BACKEND_BASE_URL}/api/v1/auth/google/login`;
+  };
+
+  // 로그아웃 핸들러
   const handleLogout = async () => {
     try {
-      const response = await fetch('/api/v1/auth/logout', {
-        method: 'POST',
+      // .env의 REACT_APP_API_PREFIX가 "http://localhost:8000" 이라고 가정
+      const BACKEND_BASE_URL = process.env.REACT_APP_API_PREFIX || "http://localhost:8000";
+
+      // 백엔드 문서에 따라 "/api/v1/logout" 엔드포인트 호출
+      // main.py에서 로그아웃 라우터(예: user_router 또는 google_login_router에 있다면)의 prefix가 "/api/v1"이고
+      // 해당 라우터 파일에 @router.post("/logout") 이라면,
+      // 최종 URL은 'http://localhost:8000/api/v1/logout'이 되어야 합니다.
+      await axios.post(`${BACKEND_BASE_URL}/api/v1/logout`, {}, {
+        withCredentials: true // 쿠키가 자동으로 포함되도록 설정
       });
-      if (response.ok) {
-        setUser(null); // 사용자 상태 초기화
-        navigate('/'); // 로그아웃 후 홈으로 리디렉션
-      } else {
-        console.error("Logout failed.");
-      }
+      setUser(null); // 사용자 정보 초기화
+      alert('로그아웃되었습니다.');
+      navigate('/'); // 로그아웃 후 홈으로 리디렉션
     } catch (error) {
-      console.error("Error during logout:", error);
+      console.error('로그아웃 실패:', error);
+      alert('로그아웃 중 오류가 발생했습니다. 다시 시도해주세요.');
     }
   };
 
@@ -172,7 +184,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
             <Typography fontWeight="bold" fontSize={14} mb={1}>최근 검색어</Typography>
             {recentSearches.map((spot, i) => (
               <Box
-                key={`recent-${i}-${spot}`}
+                key={`recent-${i}-${spot}`} // **고유한 key 사용:** `i`와 `spot`을 조합하여 고유성 확보
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => handleSpotSelect(spot)}
                 sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', cursor: 'pointer', '&:hover': { backgroundColor: '#f0f0f0' } }}
@@ -195,7 +207,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
             <Typography fontWeight="bold" fontSize={14} mb={1}>실시간 인기 검색어</Typography>
             {liveKeywords.map((keyword, index) => (
               <Box
-                key={`live-${index}-${keyword}`}
+                key={`live-${index}-${keyword}`} // **고유한 key 사용:** `index`와 `keyword`를 조합하여 고유성 확보
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => handleSpotSelect(keyword)}
                 sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', cursor: 'pointer', '&:hover': { backgroundColor: '#f0f0f0' } }}
@@ -291,7 +303,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
           <Box className="header__right">
             <IconButton className="header__icon-button" sx={{ color: '#000' }}><PublicIcon /></IconButton>
             <IconButton className="header__icon-button" onClick={() => navigate('/wishlist')} sx={{ color: '#000' }}><FavoriteBorderIcon /></IconButton>
-            {/* **수정:** 로그인 상태에 따라 아이콘 변경 */}
+            {/* 로그인 상태에 따라 아이콘 변경 */}
             {user ? (
               <IconButton className="header__icon-button" sx={{ color: '#000' }} onClick={toggleDrawer(true)}>
                 <Avatar src={user.picture} alt={user.name} />
@@ -308,7 +320,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
       <Drawer anchor="left" open={drawerOpen} onClose={toggleDrawer(false)}>
         <Box sx={{ width: 250, color: '#000' }} role="presentation" onKeyDown={toggleDrawer(false)}>
           <Box sx={{ display: 'flex', alignItems: 'center', padding: '16px' }}>
-            {/* **수정:** 로그인 상태에 따라 아바타 및 로그인/로그아웃 표시 */}
+            {/* 로그인 상태에 따라 아바타 및 로그인/로그아웃 표시 */}
             {user ? (
               <>
                 <Avatar src={user.picture} alt={user.name} sx={{ marginRight: '8px' }} />
@@ -348,7 +360,7 @@ const Header = ({ onSelectCategory = () => { } }) => {
             {serviceList.map((item) => (
               <ListItem
                 button
-                key={item.label}  
+                key={item.label} // key는 고유해야 합니다. serviceList의 label이 고유하다고 가정
                 onClick={toggleDrawer(false)}
                 sx={{ px: 2, py: 1, cursor: 'pointer', '&:hover': { backgroundColor: '#f0f0f0' } }}
               >
@@ -363,4 +375,4 @@ const Header = ({ onSelectCategory = () => { } }) => {
   );
 };
 
-export default Header       ;
+export default Header;

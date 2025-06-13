@@ -1,21 +1,19 @@
-// src/components/TouristList.js (이전과 동일)
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardMedia, Typography, Box, IconButton } from '@mui/material';
 import { Star, Heart } from 'lucide-react';
 import { useWishlist } from '../contexts/WishlistContext';
 
-
-const TouristList = ({ items }) => { // wishlist, toggleWishlist props 제거
+const TouristList = ({ items }) => {
   const navigate = useNavigate();
   const { isWishlisted, addToWishlist, removeFromWishlist } = useWishlist();
 
   const handleItemClick = (id) => {
-    navigate(`/tourist/${id}`); // 상세 페이지로 이동
+    navigate(`/tourist/${id}`);
   };
 
   const handleWishlistToggle = (event, item) => {
-    event.stopPropagation(); // 카드 클릭 이벤트가 발생하지 않도록 방지
+    event.stopPropagation();
     if (isWishlisted(item.id)) {
       removeFromWishlist(item.id);
     } else {
@@ -48,16 +46,16 @@ const TouristList = ({ items }) => { // wishlist, toggleWishlist props 제거
             <CardMedia
               component="img"
               height="180"
-              image={item.image}
-              alt={item.title}
+              image={`/images/${item.id}.jpg`}
+              alt={item.name}
               sx={{ objectFit: 'cover' }}
             />
             <CardContent sx={{ flexGrow: 1, position: 'relative' }}>
               <Typography variant="h6" component="div" sx={{ mb: 1 }}>
-                {item.title}
+                {item.name}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                {item.location}
+                {item.address || item.region || '위치 정보 없음'}
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <Star color="action" size={16} style={{ marginRight: 4 }} />

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Typography } from '@mui/material';
-import { useParams, useNavigate } from 'react-router-dom'; // useParams와 useNavigate 추가
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   MapPin,
@@ -19,17 +19,17 @@ import {
   Play,
   Wifi,
 } from 'lucide-react';
-import allTouristSpotsData from '../data/touristData'; // 변경: 모든 관광지 데이터를 가져옵니다.
-import './TouristDetailPage.scss'; // Import SCSS styles
-import { useWishlist } from '../contexts/WishlistContext'; // WishlistContext 추가
+import { busanSampleData } from '../data/busanSampleData'; // 실제 관광지 데이터
+import './TouristDetailPage.scss';
+import { useWishlist } from '../contexts/WishlistContext';
 
 const TouristDetailPage = () => {
-  const { touristId } = useParams(); // URL 파라미터에서 touristId를 가져옵니다.
-  const navigate = useNavigate(); // 페이지 이동을 위한 useNavigate 훅 사용
-  const { isWishlisted, addToWishlist, removeFromWishlist } = useWishlist(); // 위시리스트 훅 사용
+  const { id: touristId } = useParams();
+  const navigate = useNavigate();
+  const { isWishlisted, addToWishlist, removeFromWishlist } = useWishlist();
 
-  // URL 파라미터에서 가져온 ID로 해당 관광지 데이터를 찾습니다.
-  const touristData = allTouristSpotsData[touristId];
+  // touristData를 id로 검색 (id는 문자열이어야 함)
+  const touristData = busanSampleData.find(item => item.id === touristId);
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -42,13 +42,12 @@ const TouristDetailPage = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // touristData가 없을 경우 (예: 잘못된 ID로 접근) 처리
   if (!touristData) {
     return (
       <div className="tourist-detail-page not-found">
         <div className="floating-header floating-header--scrolled">
           <div className="header-content">
-            <button className="back-button" onClick={() => navigate(-1)}> {/* 뒤로가기 */}
+            <button className="back-button" onClick={() => navigate(-1)}>
               <ArrowLeft size={20} />
               <span className="back-text">목록으로 돌아가기</span>
             </button>
@@ -76,7 +75,7 @@ const TouristDetailPage = () => {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: touristData.title,
+          title: touristData.name,
           text: touristData.description,
           url: window.location.href,
         });
@@ -94,11 +93,11 @@ const TouristDetailPage = () => {
   };
 
   const infoItems = [
-    { icon: MapPin, label: "주소", value: touristData.fullAddress },
-    { icon: Clock, label: "운영시간", value: touristData.hours },
-    { icon: Phone, label: "전화번호", value: touristData.phone },
+    { icon: MapPin, label: "주소", value: touristData.address || touristData.region || '정보 없음' },
+    { icon: Clock, label: "운영시간", value: touristData.hours || '정보 없음' },
+    { icon: Phone, label: "전화번호", value: touristData.phone || '정보 없음' },
     { icon: Globe, label: "웹사이트", value: touristData.website ? <a href={`http://${touristData.website}`} target="_blank" rel="noopener noreferrer">{touristData.website}</a> : '정보 없음' },
-    { icon: DollarSign, label: "입장료", value: touristData.entranceFee }
+    { icon: DollarSign, label: "입장료", value: touristData.entranceFee || '정보 없음' }
   ];
 
   return (
@@ -106,21 +105,19 @@ const TouristDetailPage = () => {
       {/* Floating Header */}
       <div className={`floating-header ${isScrolled ? 'floating-header--scrolled' : 'floating-header--transparent'}`}>
         <div className="header-content">
-          <button className="back-button" onClick={() => navigate(-1)}> {/* 뒤로가기 */}
+          <button className="back-button" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
             <span className="back-text">목록으로 돌아가기</span>
           </button>
-
           {isScrolled && (
             <div className="header-title animate-fade-in-up">
-              <h1>{touristData.title}</h1>
+              <h1>{touristData.name}</h1>
               <div className="rating-badge">
                 <Star className="w-4 h-4" />
-                <span>{touristData.rating}</span>
+                <span>{touristData.rating || 'N/A'}</span>
               </div>
             </div>
           )}
-
           <div className="header-actions">
             <button onClick={handleShare} className="action-button">
               <Share2 size={20} />
@@ -132,7 +129,7 @@ const TouristDetailPage = () => {
               <Heart
                 size={20}
                 className="heart-icon"
-                fill={isWishlisted(touristData.id) ? '#dc3545' : 'none'} // 위시리스트 상태에 따라 하트 색상 변경
+                fill={isWishlisted(touristData.id) ? '#dc3545' : 'none'}
               />
             </button>
           </div>
@@ -143,7 +140,7 @@ const TouristDetailPage = () => {
       <div className="hero-section">
         <div
           className={`hero-background ${imageLoaded ? 'loaded' : ''}`}
-          style={{ backgroundImage: `url(${touristData.image})` }}
+          style={{ backgroundImage: `url(/images/${touristData.id}.jpg)` }}
           onLoad={() => setImageLoaded(true)}
         />
         <div className="hero-overlay" />
@@ -163,31 +160,28 @@ const TouristDetailPage = () => {
           <div className="content-wrapper">
             <div className="tags-container">
               <span className="category-tag">
-                {touristData.subCategory}
+                {touristData.category}
               </span>
-              {touristData.tags.slice(0, 4).map((tag, index) => (
+              {touristData.tags?.slice(0, 4).map((tag, index) => (
                 <span key={index} className="tag">
                   {tag}
                 </span>
               ))}
             </div>
-
             <h1 className="hero-title animate-fade-in-up">
-              {touristData.title}
+              {touristData.name}
             </h1>
-
             <div className="hero-meta animate-fade-in-up">
               <div className="meta-item">
                 <MapPin size={20} />
-                <span>{touristData.location}</span>
+                <span>{touristData.address || touristData.region || '정보 없음'}</span>
               </div>
               <div className="rating-info">
                 <Star className="star-icon w-5 h-5" />
-                <span className="rating-score">{touristData.rating}</span>
-                <span className="review-count">({touristData.reviewCount.toLocaleString()})</span>
+                <span className="rating-score">{touristData.rating || 'N/A'}</span>
+                <span className="review-count">({touristData.reviewCount ? touristData.reviewCount.toLocaleString() : 0})</span>
               </div>
             </div>
-
             <button className="cta-button animate-fade-in-up">
               <Navigation size={20} />
               길찾기
@@ -209,102 +203,15 @@ const TouristDetailPage = () => {
                 </div>
                 관광지 소개
               </h2>
-              <p className="description-text">{touristData.description}</p>
+              <p className="description-text">{touristData.description || '설명이 없습니다.'}</p>
             </div>
-
-            {/* Gallery */}
-            {touristData.gallery && touristData.gallery.length > 0 && (
-              <div className="content-card">
-                <h2 className="card-title">
-                  <div className="title-icon title-icon--purple">
-                    <Camera className="text-white" size={20} />
-                  </div>
-                  사진 갤러리
-                </h2>
-                <div className="gallery-grid">
-                  {touristData.gallery.map((img, index) => (
-                    <div
-                      key={index}
-                      className="gallery-item"
-                      // onClick={() => setActiveGalleryIndex(index)} // 갤러리 뷰어 기능 추가 시 사용
-                    >
-                      <img
-                        src={img}
-                        alt={`Gallery ${index + 1}`}
-                        className="gallery-image"
-                      />
-                      <div className="gallery-overlay">
-                        <Camera className="camera-icon" size={24} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Facilities */}
-            {touristData.facilities && touristData.facilities.length > 0 && (
-              <div className="content-card">
-                <h2 className="card-title">
-                  <div className="title-icon title-icon--green">
-                    <Wifi className="text-white" size={20} />
-                  </div>
-                  편의 시설
-                </h2>
-                <div className="facilities-grid">
-                  {touristData.facilities.map((facility, index) => (
-                    <div key={index} className="facility-item">
-                      <div className="facility-dot"></div>
-                      <span className="facility-name">{facility}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Nearby Attractions */}
-            {touristData.nearbyAttractions && touristData.nearbyAttractions.length > 0 && (
-              <div className="content-card">
-                <h2 className="card-title">
-                  <div className="title-icon title-icon--orange">
-                    <MapPin className="text-white" size={20} />
-                  </div>
-                  주변 관광지
-                </h2>
-                <div className="nearby-grid">
-                  {touristData.nearbyAttractions.map((place) => (
-                    <div key={place.id} className="nearby-item">
-                      <div className="nearby-content">
-                        <img
-                          src={place.image}
-                          alt={place.title}
-                          className="nearby-image"
-                        />
-                        <div className="nearby-info">
-                          <h3 className="nearby-title">{place.title}</h3>
-                          <div className="flex items-center gap-2">
-                            <span className="nearby-subtitle">{place.distance}</span>
-                            <div className="flex items-center gap-1">
-                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                              <span className="text-xs text-gray-600">{place.rating}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <ChevronRight className="chevron-icon" size={20} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* 기타 섹션은 필요시 추가 */}
           </div>
-
           {/* Right Column - Sticky Sidebar */}
           <div className="sidebar animate-slide-in-right" style={{ animationDelay: '0.4s' }}>
             {/* Info Card */}
             <div className="content-card sticky-card">
               <h2 className="card-title">상세 정보</h2>
-
               <div className="info-list">
                 {infoItems.map((item, index) => (
                   <div key={index} className="info-item">
@@ -316,82 +223,11 @@ const TouristDetailPage = () => {
                   </div>
                 ))}
               </div>
-
               <button className="map-button">
                 <Navigation size={20} />
                 네이버 지도로 보기
               </button>
             </div>
-
-            {/* Nearby Restaurants */}
-            {touristData.nearbyRestaurants && touristData.nearbyRestaurants.length > 0 && (
-              <div className="content-card">
-                <h2 className="card-title">
-                  <div className="title-icon title-icon--orange">
-                    <Coffee className="text-white" size={20} />
-                  </div>
-                  주변 맛집
-                </h2>
-
-                <div className="list-container">
-                  {touristData.nearbyRestaurants.map((restaurant) => (
-                    <div key={restaurant.id} className="list-item">
-                      <img
-                        src={restaurant.image}
-                        alt={restaurant.title}
-                        className="item-image"
-                      />
-                      <div className="item-info">
-                        <h3 className="item-title">{restaurant.title}</h3>
-                        <div className="flex items-center gap-2">
-                          <span className="item-subtitle">{restaurant.cuisine}</span>
-                          <span className="text-xs text-green-600 font-semibold">{restaurant.priceRange}</span>
-                        </div>
-                        <div className="flex items-center gap-1 mt-1">
-                          <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                          <span className="text-xs text-gray-600">{restaurant.rating}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Nearby Accommodations */}
-            {touristData.nearbyAccommodations && touristData.nearbyAccommodations.length > 0 && (
-              <div className="content-card">
-                <h2 className="card-title">
-                  <div className="title-icon title-icon--purple">
-                    <Bed className="text-white" size={20} />
-                  </div>
-                  주변 숙소
-                </h2>
-
-                <div className="list-container">
-                  {touristData.nearbyAccommodations.map((accommodation) => (
-                    <div key={accommodation.id} className="list-item">
-                      <img
-                        src={accommodation.image}
-                        alt={accommodation.title}
-                        className="item-image"
-                      />
-                      <div className="item-info">
-                        <h3 className="item-title">{accommodation.title}</h3>
-                        <div className="flex items-center gap-2">
-                          <span className="item-subtitle">{accommodation.type}</span>
-                          <span className="text-xs text-blue-600 font-semibold">{accommodation.priceRange}</span>
-                        </div>
-                        <div className="flex items-center gap-1 mt-1">
-                          <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                          <span className="text-xs text-gray-600">{accommodation.rating}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
