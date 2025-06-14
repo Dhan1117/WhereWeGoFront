@@ -378,7 +378,7 @@ export default function SurveyPage() { // 컴포넌트 이름도 SurveyPage로 �
 
             {currentAttraction && (
               <div className={styles.attractionCard}>
-                <img src={`/images/${currentAttraction.id}.jpg`} alt={currentAttraction.name} className={styles.attractionImage} />
+                <img src={`/image/${currentAttraction.id}.jpg`} alt={currentAttraction.name} className={styles.attractionImage} />
                 <div className={styles.attractionOverlay}>
                   <h2 className={styles.attractionName}>{currentAttraction.name}</h2>
                   <p className={styles.attractionDescription}>{currentAttraction.description}</p>
