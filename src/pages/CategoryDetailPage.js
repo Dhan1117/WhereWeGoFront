@@ -1,20 +1,21 @@
+// src/pages/CategoryDetailPage.js
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Typography, Box, Pagination, Button } from '@mui/material';
 import { categoriesData } from '../data/categoriesData';
-import SubCategoryTags from '../components/SubCategoryTags';
-import TouristList from '../components/TouristList';
+// import SubCategoryTags from '../components/SubCategoryTags'; // 더 이상 사용하지 않을 경우 제거
+// import TouristList from '../components/TouristList'; // 더 이상 사용하지 않을 경우 제거
 import { busanSampleData } from '../data/busanSampleData';
+import CategoryDetail from '../components/CategoryDetail'; // <<--- CategoryDetail 컴포넌트 임포트!
 
 const ITEMS_PER_PAGE = 10;
-
 
 const CategoryDetailPage = ({ onSelectSubCategory }) => {
   const { categoryLabelFromUrl } = useParams();
   const navigate = useNavigate();
 
-  const currentCategoryLabel = useMemo(() =>
-    categoryLabelFromUrl ? decodeURIComponent(categoryLabelFromUrl) : undefined,
+  const currentCategoryLabel = useMemo(
+    () => (categoryLabelFromUrl ? decodeURIComponent(categoryLabelFromUrl) : undefined),
     [categoryLabelFromUrl]
   );
 
@@ -24,36 +25,19 @@ const CategoryDetailPage = ({ onSelectSubCategory }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [touristData, setTouristData] = useState(busanSampleData);
-  const [isDataLoading, setIsDataLoading] = useState(false); // 불필요하므로 false로 처리
   const [error, setError] = useState(null);
 
-  // 백엔드에서 데이터 불러오는 부분 주석처리
-  /*
   useEffect(() => {
-    const fetchTouristData = async () => {
-      try {
-        const response = await fetch('/api/tourist_spots');
-        if (!response.ok) throw new Error('데이터 로드 실패');
-        const data = await response.json();
-        setTouristData(Object.values(data));
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setIsDataLoading(false);
-      }
-    };
-    fetchTouristData();
-  }, []);
-  */
-
-  // 카테고리 및 서브카테고리 설정
-  useEffect(() => {
+    console.log('CategoryDetailPage - currentCategoryLabel (decoded):', currentCategoryLabel);
+    console.log('CategoryDetailPage - categoriesData:', categoriesData);
     setIsLoading(true);
     if (currentCategoryLabel) {
       const foundCategory = categoriesData.find(c => c.label === currentCategoryLabel);
+      console.log('CategoryDetailPage - 찾은 category:', foundCategory);
       if (foundCategory) {
         setCategory(foundCategory);
         const existingSubCategories = foundCategory.subCategories || [];
+        console.log('CategoryDetailPage - 기존 subCategories:', existingSubCategories);
         const hasAllCategory = existingSubCategories.some(sub => sub.label === '전체');
         let updatedSubCategories = [];
         if (!hasAllCategory) {
@@ -76,19 +60,19 @@ const CategoryDetailPage = ({ onSelectSubCategory }) => {
     setIsLoading(false);
   }, [currentCategoryLabel]);
 
-  // 필터링 로직
-const filteredTouristData = useMemo(() => {
-  if (!category) return [];
-  const itemsForMainCategory = touristData.filter(item => 
-    item.categoryGroup === category.label // categoryGroup으로 필터링
-  );
-  if (selectedSubCategory === '전체') {
-    return itemsForMainCategory;
-  }
-  return itemsForMainCategory.filter(item => 
-    item.category === selectedSubCategory // category로 서브 필터링
-  );
-}, [category, selectedSubCategory, touristData]);
+  // 필터링 로직 (현재 TouristList에 넘겨주는 로직은 유지하거나 필요에 따라 제거)
+  const filteredTouristData = useMemo(() => {
+    if (!category) return [];
+    const itemsForMainCategory = touristData.filter(item =>
+      item.category_group === category.label
+    );
+    if (selectedSubCategory === '전체') {
+      return itemsForMainCategory;
+    }
+    return itemsForMainCategory.filter(item =>
+      item.category === selectedSubCategory
+    );
+  }, [category, selectedSubCategory, touristData]);
 
   const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentItemsOnPage = filteredTouristData.slice(startIdx, startIdx + ITEMS_PER_PAGE);
@@ -107,8 +91,7 @@ const filteredTouristData = useMemo(() => {
     }
   };
 
-  // 로딩 및 에러 처리
-  if (isLoading) { // isDataLoading은 사용하지 않음
+  if (isLoading) {
     return (
       <Container maxWidth="md" sx={{ py: 6 }}>
         <Typography>데이터 로드 중...</Typography>
@@ -141,17 +124,23 @@ const filteredTouristData = useMemo(() => {
         여행지 #{category.label}
       </Typography>
 
-      <SubCategoryTags
-        subCategories={subCategories}
-        selected={selectedSubCategory}
-        onSelect={handleSubCategorySelect}
+      {/* 🔽🔽🔽 이 부분을 CategoryDetail 컴포넌트 렌더링으로 변경합니다. 🔽🔽🔽 */}
+      {/* 이제 CategoryDetail이 SubCategoryList를 렌더링할 것입니다. */}
+      <CategoryDetail
+        selectedCategory={currentCategoryLabel}
+        categoriesData={categoriesData}
+        onSelectSubCategory={handleSubCategorySelect} // CategoryDetail이 이 함수를 받아 SubCategoryList에 넘겨줄 것입니다.
       />
+      {/* 🔼🔼🔼 🔼🔼🔼 🔼🔼🔼 🔼🔼🔼 🔼🔼🔼 🔼🔼🔼 🔼🔼🔼 🔼🔼🔼 */}
 
-      <TouristList
+      {/* 기존의 TouristList는 필요에 따라 유지하거나 제거합니다.
+         만약 CategoryDetail 내에서 상세 목록을 보여줄 것이라면 필요 없을 수 있습니다. */}
+      {/* <TouristList
         items={currentItemsOnPage}
-      />
+      /> */}
 
-      {totalPages > 0 && (
+      {/* Pagination도 TouristList와 함께 필요 여부를 판단합니다. */}
+      {/* {totalPages > 0 && (
         <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
           <Pagination
             count={totalPages}
@@ -162,7 +151,7 @@ const filteredTouristData = useMemo(() => {
             size="large"
           />
         </Box>
-      )}
+      )} */}
     </Container>
   );
 };

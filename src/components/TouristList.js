@@ -8,16 +8,16 @@ const TouristList = ({ items }) => {
   const navigate = useNavigate();
   const { isWishlisted, addToWishlist, removeFromWishlist } = useWishlist();
 
-  const handleItemClick = (id) => {
-    navigate(`/tourist/${id}`);
+  const handleItemClick = (_id) => {
+    navigate(`/tourist/${_id}`);
   };
 
   const handleWishlistToggle = (event, item) => {
     event.stopPropagation();
-    if (isWishlisted(item.id)) {
-      removeFromWishlist(item.id);
+    if (isWishlisted(item._id)) {
+      removeFromWishlist(item._id);
     } else {
-      addToWishlist(item.id);
+      addToWishlist(item._id);
     }
   };
 
@@ -30,7 +30,7 @@ const TouristList = ({ items }) => {
       ) : (
         items.map((item) => (
           <Card
-            key={item.id}
+            key={item._id}
             sx={{
               display: 'flex',
               flexDirection: 'column',
@@ -41,12 +41,12 @@ const TouristList = ({ items }) => {
                 boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
               },
             }}
-            onClick={() => handleItemClick(item.id)}
+            onClick={() => handleItemClick(item._id)}
           >
             <CardMedia
               component="img"
               height="180"
-              image={`/images/${item.id}.jpg`}
+              image={`/images/${item._id}.jpg`}
               alt={item.name}
               sx={{ objectFit: 'cover' }}
             />
@@ -55,40 +55,25 @@ const TouristList = ({ items }) => {
                 {item.name}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                {item.address || item.region || '위치 정보 없음'}
+                {item.category_group || '카테고리 정보 없음'}
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <Star color="action" size={16} style={{ marginRight: 4 }} />
                 <Typography variant="body2" color="text.secondary">
-                  {item.rating || 'N/A'} ({item.reviewCount ? item.reviewCount.toLocaleString() : 0})
+                  방문자 수: {item.visitors_count ? item.visitors_count.toLocaleString() : 'N/A'}
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
-                {item.tags?.slice(0, 3).map((tag, idx) => (
-                  <Typography
-                    key={idx}
-                    variant="caption"
-                    sx={{
-                      backgroundColor: '#e0e0e0',
-                      borderRadius: '4px',
-                      px: 0.8,
-                      py: 0.3,
-                      fontSize: '0.75rem',
-                      color: '#555',
-                    }}
-                  >
-                    #{tag}
-                  </Typography>
-                ))}
-              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                인덱스: {item.index}
+              </Typography>
               <IconButton
                 sx={{ position: 'absolute', top: 8, right: 8, background: 'rgba(255,255,255,0.7)', '&:hover': { background: 'rgba(255,255,255,0.9)' } }}
                 onClick={(event) => handleWishlistToggle(event, item)}
               >
                 <Heart
                   size={20}
-                  color={isWishlisted(item.id) ? '#dc3545' : '#777'}
-                  fill={isWishlisted(item.id) ? '#dc3545' : 'none'}
+                  color={isWishlisted(item._id) ? '#dc3545' : '#777'}
+                  fill={isWishlisted(item._id) ? '#dc3545' : 'none'}
                 />
               </IconButton>
             </CardContent>

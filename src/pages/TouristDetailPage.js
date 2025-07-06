@@ -19,7 +19,7 @@ import {
   Play,
   Wifi,
 } from 'lucide-react';
-import { busanSampleData } from '../data/busanSampleData'; // 실제 관광지 데이터
+import { busanSampleData } from '../data/busanSampleData';
 import './TouristDetailPage.scss';
 import { useWishlist } from '../contexts/WishlistContext';
 
@@ -29,18 +29,23 @@ const TouristDetailPage = () => {
   const { isWishlisted, addToWishlist, removeFromWishlist } = useWishlist();
 
   // touristData를 id로 검색 (id는 문자열이어야 함)
-  const touristData = busanSampleData.find(item => item.id === touristId);
+  const touristData = busanSampleData.find(item => item._id === touristId);
+
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 100);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+    console.log('TouristDetailPage 렌더링 시작');
+    console.log('URL에서 가져온 touristId:', touristId);
+    console.log('busanSampleData 내용:', busanSampleData);
+    if (!touristData) {
+      console.log('touristData를 찾을 수 없습니다! "정보 없음" 페이지 렌더링');
+    } else {
+      console.log('찾은 touristData:', touristData);
+    }
+  }, [touristId, touristData]); // touristId나 touristData가 변경될 때마다 실행
+
 
   if (!touristData) {
     return (
@@ -64,13 +69,12 @@ const TouristDetailPage = () => {
   }
 
   const handleWishlistToggle = () => {
-    if (isWishlisted(touristData.id)) {
-      removeFromWishlist(touristData.id);
+    if (isWishlisted(touristData._id)) {
+      removeFromWishlist(touristData._id);
     } else {
-      addToWishlist(touristData.id);
+      addToWishlist(touristData._id);
     }
   };
-
   const handleShare = async () => {
     if (navigator.share) {
       try {
@@ -102,7 +106,7 @@ const TouristDetailPage = () => {
 
   return (
     <div className="tourist-detail-page">
-      {/* Floating Header */}
+
       <div className={`floating-header ${isScrolled ? 'floating-header--scrolled' : 'floating-header--transparent'}`}>
         <div className="header-content">
           <button className="back-button" onClick={() => navigate(-1)}>
@@ -124,28 +128,27 @@ const TouristDetailPage = () => {
             </button>
             <button
               onClick={handleWishlistToggle}
-              className={`action-button ${isWishlisted(touristData.id) ? 'action-button--liked' : ''}`}
+              className={`action-button ${isWishlisted(touristData._id) ? 'action-button--liked' : ''}`}
             >
               <Heart
                 size={20}
                 className="heart-icon"
-                fill={isWishlisted(touristData.id) ? '#dc3545' : 'none'}
+                fill={isWishlisted(touristData._id) ? '#dc3545' : 'none'}
               />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Hero Section */}
+
       <div className="hero-section">
         <div
           className={`hero-background ${imageLoaded ? 'loaded' : ''}`}
-          style={{ backgroundImage: `url(/images/${touristData.id}.jpg)` }}
+          style={{ backgroundImage: `url(/images/${touristData._id}.jpg)` }}
           onLoad={() => setImageLoaded(true)}
         />
         <div className="hero-overlay" />
 
-        {/* Floating Action Buttons */}
         <div className="floating-actions">
           <button className="floating-button">
             <Camera size={20} />
@@ -155,7 +158,7 @@ const TouristDetailPage = () => {
           </button>
         </div>
 
-        {/* Hero Content */}
+
         <div className="hero-content">
           <div className="content-wrapper">
             <div className="tags-container">
@@ -190,12 +193,9 @@ const TouristDetailPage = () => {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="main-content">
         <div className="content-grid">
-          {/* Left Column */}
           <div className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-            {/* Description */}
             <div className="content-card">
               <h2 className="card-title">
                 <div className="title-icon title-icon--blue">
@@ -205,11 +205,9 @@ const TouristDetailPage = () => {
               </h2>
               <p className="description-text">{touristData.description || '설명이 없습니다.'}</p>
             </div>
-            {/* 기타 섹션은 필요시 추가 */}
           </div>
-          {/* Right Column - Sticky Sidebar */}
           <div className="sidebar animate-slide-in-right" style={{ animationDelay: '0.4s' }}>
-            {/* Info Card */}
+    
             <div className="content-card sticky-card">
               <h2 className="card-title">상세 정보</h2>
               <div className="info-list">
