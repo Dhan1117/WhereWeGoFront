@@ -23,7 +23,7 @@ import axios from 'axios';
 
 export async function generateItinerary(requestData) {
   try {
-    const res = await axios.post("http://localhost:8000/api/v1/itinerary/generate", requestData);
+    const res = await axios.post("http://localhost:8000/api/v1/generate", requestData);
     return res.data;
   } catch (error) {
     console.error("여행 일정을 생성하는 중 오류 발생:", error);

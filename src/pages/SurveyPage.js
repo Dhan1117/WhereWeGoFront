@@ -100,13 +100,13 @@ const surveyAttractions = [
 ];
 
 const startingPoints = [
-  { id: 'busan-station', name: '부산역', lat: 35.1156, lng: 129.0423 },
-  { id: 'gimhae-airport', name: '김해공항', lat: 35.1796, lng: 128.9384 },
-  { id: 'haeundae', name: '해운대', lat: 35.1587, lng: 129.1606 },
-  { id: 'seomyeon', name: '서면', lat: 35.1575, lng: 129.0594 },
-  { id: 'nampo', name: '남포동', lat: 35.0969, lng: 129.0286 }
+  { id: '6870f39e748cc28771f1b2a7', name: '부산역' },
+  { id: '6870f39e748cc28771f1b2a8', name: '김해국제공항' },
+  { id: '6870f39e748cc28771f1b2a3', name: '부산서부시외버스터미널' },
+  { id: '6870f39e748cc28771f1b2a5', name: '사상시외버스터미널' },
+  { id: '6870f39e748cc28771f1b2a6', name: '부산종합버스터미널' },
+  { id: '6870f39e748cc28771f1b2a4', name: '부산항 국제여객터미널' }
 ];
-
 
 export default function SurveyPage() { // 컴포넌트 이름도 SurveyPage로 변경 권장
   const navigate = useNavigate();
@@ -123,7 +123,7 @@ export default function SurveyPage() { // 컴포넌트 이름도 SurveyPage로 �
   const [travelDuration, setTravelDuration] = useState(2);
   const [travelStartDate, setTravelStartDate] = useState('');
   const [showOtherCityInput, setShowOtherCityInput] = useState(false);
-  const [startingPoint, setStartingPoint] = useState('busan-station');
+  const [startingPoint, setStartingPoint] = useState(startingPoints[0].id);
 
   const totalAttractions = surveyAttractions.filter(a => a.category !== '교통').length;
   const completedCount = Object.keys(preferences).length;
@@ -137,42 +137,21 @@ export default function SurveyPage() { // 컴포넌트 이름도 SurveyPage로 �
       const factInterval = setInterval(() => {
         setFactIndex((prev) => (prev + 1) % facts.length);
       }, 4000);
-
+      
       const progressInterval = setInterval(() => {
-        setLoadingProgress((prev) => {
-          const newProgress = prev + 5;
-          return newProgress <= 100 ? newProgress : 100;
-        });
+        // API 호출 중에는 95%까지만 진행되도록 하여 실제 완료와 구분
+        setLoadingProgress((prev) => Math.min(prev + 5, 95));
       }, 500);
 
-      const loadingTimer = setTimeout(() => {
-        clearInterval(messageInterval);
-        clearInterval(factInterval);
-        clearInterval(progressInterval);
-        clearTimeout(loadingTimer);
-
-        navigate('/busan-travel-plan', {
-          state: {
-            preferences: preferences,
-            departureCity: departureCity,
-            otherCity: otherCity,
-            travelDuration: travelDuration,
-            travelStartDate: travelStartDate,
-            startingPoint: startingPoint,
-            surveyAttractions: surveyAttractions,
-            startingPoints: startingPoints,
-          }
-        });
-      }, 8000);
-
+      // setTimeout과 navigate 로직이 제거됨
       return () => {
         clearInterval(messageInterval);
         clearInterval(factInterval);
         clearInterval(progressInterval);
-        clearTimeout(loadingTimer);
       };
     }
-  }, [stage, navigate, preferences, departureCity, otherCity, travelDuration, travelStartDate, startingPoint]);
+}, [stage]);
+
 
   useEffect(() => {
     const today = new Date();
@@ -182,14 +161,17 @@ export default function SurveyPage() { // 컴포넌트 이름도 SurveyPage로 �
 
   const handlePreference = (preference) => {
     const currentAttraction = surveyAttractions.filter(a => a.category !== '교통')[currentAttractionIndex];
-    setPreferences(prev => ({ ...prev, [currentAttraction.id]: preference }));
+    // 'like'일 경우에만 true, 나머지는 false 또는 선호도 객체에서 제외할 수 있습니다.
+    // 여기서는 'like'만 true로 기록합니다.
+    setPreferences(prev => ({ ...prev, [String(currentAttraction.id)]: preference === 'like' }));
 
     if (currentAttractionIndex < totalAttractions - 1) {
       setCurrentAttractionIndex(prevIndex => prevIndex + 1);
     } else {
       setStage('additionalInfo');
     }
-  };
+};
+
 
   const handleStartSurvey = () => {
     setStage('survey');
@@ -223,10 +205,64 @@ export default function SurveyPage() { // 컴포넌트 이름도 SurveyPage로 �
     ? surveyAttractions.filter(a => a.category !== '교통')[currentAttractionIndex]
     : null;
 
-  const handleSubmitAdditionalInfo = () => {
+const handleSubmitAdditionalInfo = async () => {
     setStage('loading');
-    setLoadingProgress(0);
+    setLoadingProgress(0); // 로딩 애니메이션 시작
+
+    // 백엔드의 ItineraryRequest 스키마에 맞게 요청 데이터 구성
+    const requestBody = {
+      departureCity: departureCity,
+      otherCity: otherCity,
+      travelDuration: travelDuration,
+      travelStartDate: travelStartDate,
+      startingPoint: startingPoint,
+      preferences: preferences,
+      surveyAttractions: surveyAttractions.map(attr => String(attr.id))
+    };
+
+    try {
+      // ❗️ 수정된 최종 API 경로
+      // 백엔드 main.py의 prefix="/api/v1"와 라우터의 "/generate"가 조합된 경로입니다.
+      const response = await fetch('/api/v1/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      // API 응답이 정상이 아닐 경우, 에러 메시지를 포함하여 예외 처리
+      if (!response.ok) {
+        // 응답을 텍스트로 먼저 받아서 JSON인지 확인 (HTML 오류 방지)
+        const text = await response.text();
+        try {
+            const errorData = JSON.parse(text);
+            throw new Error(errorData.detail || '알 수 없는 서버 오류가 발생했습니다.');
+        } catch (e) {
+            // JSON 파싱 실패 시, HTML 오류 페이지 내용 등을 표시
+            throw new Error(`서버로부터 잘못된 형식의 응답을 받았습니다. (상태 코드: ${response.status})`);
+        }
+      }
+
+      const itineraryData = await response.json();
+
+      // 성공 시 결과 페이지로 데이터와 함께 이동
+      navigate('/busan-travel-plan', {
+        state: {
+          itinerary: itineraryData,
+          departureCity: departureCity === '기타' ? otherCity : departureCity,
+          travelDuration,
+          travelStartDate
+        }
+      });
+
+    } catch (error) {
+      console.error("Error generating itinerary:", error);
+      alert(`${error.message}`);
+      setStage('additionalInfo'); // 오류 발생 시 추가 정보 입력 화면으로 복귀
+    }
   };
+
 
   return (
     <div className={styles.container}>

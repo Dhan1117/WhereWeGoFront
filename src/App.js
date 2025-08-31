@@ -14,6 +14,9 @@ import SurveyPage from './pages/SurveyPage';
 import TouristDetailPage from './pages/TouristDetailPage';
 import TravelPlanPage from './pages/TravelPlanPage';
 import { WishlistProvider } from './contexts/WishlistContext'; // 경로 확인
+import TravelPlanSamplePage from "./pages/TravelPlanSamplePage";
+import TouristSpotRecommendPage from "./pages/TouristSpotRecommendPage"; // 추가
+import { ItineraryProvider } from './contexts/ItineraryContext'; // 
 
 const theme = createTheme({
   palette: {
@@ -62,38 +65,36 @@ function App() {
     <ThemeProvider theme={theme}>
       <SearchProvider>
         <WishlistProvider>
-          <BrowserRouter>
-            <Header onSelectCategory={setSelectedCategoryForHeader} currentCategory={selectedCategoryForHeader} />
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/survey" element={<SurveyPage />} />
-              <Route
-                path="/category"
-                element={
-                  defaultCategoryLabel ?
-                  <Navigate to={`/category/${encodeURIComponent(defaultCategoryLabel)}`} /> :
-                  <Navigate to="/" />
-                }
-              />
-              <Route
-                path="/category/:categoryLabelFromUrl"
-                element={
-                  <CategoryDetailPage
-                    onSelectSubCategory={(subLabel) => console.log("선택된 소분류:", subLabel)}
-                  />
-                }
-              />
-              
-              <Route path="/wishlist" element={<WishlistPage />} />
-              <Route path="/search" element={<SearchResultPage />} />
-              <Route path="/tourist/:touristId" element={<TouristDetailPage />} />
-              <Route path="/busan-travel-plan" element={<TravelPlanPage />} />
-            </Routes>
-          </BrowserRouter>
+          <ItineraryProvider> {/* ✅ 추가: 전역 일정 컨텍스트 */}
+            <BrowserRouter>
+              <Header onSelectCategory={setSelectedCategoryForHeader} currentCategory={selectedCategoryForHeader} />
+              <Routes>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/survey" element={<SurveyPage />} />
+                <Route
+                  path="/category"
+                  element={
+                    defaultCategoryLabel ?
+                      <Navigate to={`/category/${encodeURIComponent(defaultCategoryLabel)}`} /> :
+                      <Navigate to="/" />
+                  }
+                />
+                <Route
+                  path="/category/:categoryLabelFromUrl"
+                  element={<CategoryDetailPage onSelectSubCategory={(subLabel) => console.log("선택된 소분류:", subLabel)} />}
+                />
+                <Route path="/sample-plan" element={<TravelPlanSamplePage />} />
+                <Route path="/sample-recommend" element={<TouristSpotRecommendPage />} /> {/* 부산 추천 페이지 */}
+                <Route path="/wishlist" element={<WishlistPage />} />
+                <Route path="/search" element={<SearchResultPage />} />
+                <Route path="/tourist/:id" element={<TouristDetailPage />} />
+                <Route path="/busan-travel-plan" element={<TravelPlanPage />} /> {/* 코스 구성 페이지 */}
+              </Routes>
+            </BrowserRouter>
+          </ItineraryProvider>
         </WishlistProvider>
       </SearchProvider>
     </ThemeProvider>
   );
 }
-
 export default App;

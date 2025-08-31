@@ -7,6 +7,7 @@
     "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^6.4.12",
     "@mui/material": "^6.4.8",
+    "@react-google-maps/api": "^2.20.7",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
@@ -46,5 +47,6 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  }
+  },
+  "proxy": "http://127.0.0.1:8000"
 }

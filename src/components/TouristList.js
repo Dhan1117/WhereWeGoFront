@@ -1,3 +1,4 @@
+// src/components/TouristList.js
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardMedia, Typography, Box, IconButton } from '@mui/material';
@@ -28,7 +29,7 @@ const TouristList = ({ items }) => {
           해당 조건의 관광지가 없습니다.
         </Typography>
       ) : (
-        items.map((item) => (
+        items.map((item, idx) => (
           <Card
             key={item._id}
             sx={{
@@ -64,7 +65,7 @@ const TouristList = ({ items }) => {
                 </Typography>
               </Box>
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                인덱스: {item.index}
+                인덱스: {idx + 1}
               </Typography>
               <IconButton
                 sx={{ position: 'absolute', top: 8, right: 8, background: 'rgba(255,255,255,0.7)', '&:hover': { background: 'rgba(255,255,255,0.9)' } }}

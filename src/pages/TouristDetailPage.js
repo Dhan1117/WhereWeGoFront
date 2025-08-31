@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { Typography } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -19,33 +18,60 @@ import {
   Play,
   Wifi,
 } from 'lucide-react';
-import { busanSampleData } from '../data/busanSampleData';
-import './TouristDetailPage.scss';
 import { useWishlist } from '../contexts/WishlistContext';
+import './TouristDetailPage.scss';
+
+// Sample data for demonstration
+const busanSampleData = [
+  {
+    _id: "busan-beach-001",
+    name: "해운대 해수욕장",
+    category: "해변/바다",
+    description: "부산의 대표적인 해수욕장으로, 아름다운 백사장과 맑은 바다로 유명합니다. 다양한 수상 스포츠와 해변 활동을 즐길 수 있으며, 주변에는 맛집과 카페들이 즐비해 있어 관광객들에게 인기가 높습니다.",
+    address: "부산광역시 해운대구 해운대해변로 264",
+    region: "해운대구",
+    rating: 4.5,
+    reviewCount: 15420,
+    hours: "24시간 개방",
+    phone: "051-749-4062",
+    website: "www.haeundae.go.kr",
+    entranceFee: "무료",
+    tags: ["해변", "수상스포츠", "일몰", "카페", "맛집", "야경"]
+  }
+];
 
 const TouristDetailPage = () => {
   const { id: touristId } = useParams();
   const navigate = useNavigate();
   const { isWishlisted, addToWishlist, removeFromWishlist } = useWishlist();
 
-  // touristData를 id로 검색 (id는 문자열이어야 함)
-  const touristData = busanSampleData.find(item => item._id === touristId);
-
+  // Sample data fallback
+  const touristData = busanSampleData.find(item => item._id === touristId) || busanSampleData[0];
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
   useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop = window.scrollY;
+      setIsScrolled(scrollTop > 100);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
     console.log('TouristDetailPage 렌더링 시작');
     console.log('URL에서 가져온 touristId:', touristId);
-    console.log('busanSampleData 내용:', busanSampleData);
     if (!touristData) {
-      console.log('touristData를 찾을 수 없습니다! "정보 없음" 페이지 렌더링');
+      console.log('touristData를 찾을 수 없습니다!');
     } else {
       console.log('찾은 touristData:', touristData);
     }
-  }, [touristId, touristData]); // touristId나 touristData가 변경될 때마다 실행
-
+    // Set image as loaded after a delay to simulate loading
+    setTimeout(() => setImageLoaded(true), 500);
+  }, [touristId, touristData]);
 
   if (!touristData) {
     return (
@@ -59,9 +85,7 @@ const TouristDetailPage = () => {
           </div>
         </div>
         <div className="not-found-content">
-          <Typography variant="h5" component="h2">
-            요청하신 관광지 정보를 찾을 수 없습니다.
-          </Typography>
+          <h2>요청하신 관광지 정보를 찾을 수 없습니다.</h2>
           <button className="cta-button" onClick={() => navigate('/')}>홈으로 돌아가기</button>
         </div>
       </div>
@@ -75,6 +99,7 @@ const TouristDetailPage = () => {
       addToWishlist(touristData._id);
     }
   };
+
   const handleShare = async () => {
     if (navigator.share) {
       try {
@@ -106,7 +131,7 @@ const TouristDetailPage = () => {
 
   return (
     <div className="tourist-detail-page">
-
+      {/* Floating Header */}
       <div className={`floating-header ${isScrolled ? 'floating-header--scrolled' : 'floating-header--transparent'}`}>
         <div className="header-content">
           <button className="back-button" onClick={() => navigate(-1)}>
@@ -117,7 +142,7 @@ const TouristDetailPage = () => {
             <div className="header-title animate-fade-in-up">
               <h1>{touristData.name}</h1>
               <div className="rating-badge">
-                <Star className="w-4 h-4" />
+                <Star className="star-icon w-4 h-4" />
                 <span>{touristData.rating || 'N/A'}</span>
               </div>
             </div>
@@ -140,15 +165,27 @@ const TouristDetailPage = () => {
         </div>
       </div>
 
-
+      {/* Hero Section */}
       <div className="hero-section">
         <div
           className={`hero-background ${imageLoaded ? 'loaded' : ''}`}
-          style={{ backgroundImage: `url(/images/${touristData._id}.jpg)` }}
+          style={{ backgroundImage: `url(https://images.unsplash.com/photo-1520637736862-4d197d17c280?w=1200&h=600&fit=crop)` }}
           onLoad={() => setImageLoaded(true)}
         />
         <div className="hero-overlay" />
 
+        {/* Weather Widget */}
+        <div className="weather-widget">
+          <div className="weather-content">
+            <div className="weather-icon">☀️</div>
+            <div className="weather-info">
+              <div className="weather-temp">24°</div>
+              <div className="weather-location">부산</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Floating Actions */}
         <div className="floating-actions">
           <button className="floating-button">
             <Camera size={20} />
@@ -158,7 +195,7 @@ const TouristDetailPage = () => {
           </button>
         </div>
 
-
+        {/* Hero Content */}
         <div className="hero-content">
           <div className="content-wrapper">
             <div className="tags-container">
@@ -193,10 +230,12 @@ const TouristDetailPage = () => {
         </div>
       </div>
 
+      {/* Main Content */}
       <div className="main-content">
         <div className="content-grid">
           <div className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-            <div className="content-card">
+            {/* Description Card */}
+            <div className="content-card description-card">
               <h2 className="card-title">
                 <div className="title-icon title-icon--blue">
                   <MapPin className="text-white" size={20} />
@@ -205,10 +244,74 @@ const TouristDetailPage = () => {
               </h2>
               <p className="description-text">{touristData.description || '설명이 없습니다.'}</p>
             </div>
+
+            {/* Features Grid */}
+            <div className="content-card features-card">
+              <h2 className="card-title">
+                <div className="title-icon title-icon--green">
+                  <Coffee className="text-white" size={20} />
+                </div>
+                편의시설
+              </h2>
+              <div className="features-grid">
+                <div className="feature-item">
+                  <div className="feature-icon feature-icon--wifi">
+                    <Wifi size={20} />
+                  </div>
+                  <span>WiFi 무료</span>
+                </div>
+                <div className="feature-item">
+                  <div className="feature-icon feature-icon--parking">
+                    <Navigation size={20} />
+                  </div>
+                  <span>주차 가능</span>
+                </div>
+                <div className="feature-item">
+                  <div className="feature-icon feature-icon--cafe">
+                    <Coffee size={20} />
+                  </div>
+                  <span>카페 근처</span>
+                </div>
+                <div className="feature-item">
+                  <div className="feature-icon feature-icon--family">
+                    <Heart size={20} />
+                  </div>
+                  <span>가족 친화적</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Reviews Card */}
+            <div className="content-card reviews-card">
+              <h2 className="card-title">
+                <div className="title-icon title-icon--purple">
+                  <Star className="text-white" size={20} />
+                </div>
+                리뷰 요약
+              </h2>
+              <div className="reviews-summary">
+                <div className="rating-display">
+                  <div className="rating-number">{touristData.rating}</div>
+                  <div className="rating-stars">
+                    {[...Array(5)].map((_, i) => (
+                      <Star 
+                        key={i} 
+                        size={16} 
+                        className={i < Math.floor(touristData.rating) ? 'star-filled' : 'star-empty'} 
+                      />
+                    ))}
+                  </div>
+                  <div className="review-count-text">
+                    {touristData.reviewCount?.toLocaleString()}개의 리뷰
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Sidebar */}
           <div className="sidebar animate-slide-in-right" style={{ animationDelay: '0.4s' }}>
-    
-            <div className="content-card sticky-card">
+            <div className="content-card sticky-card info-card">
               <h2 className="card-title">상세 정보</h2>
               <div className="info-list">
                 {infoItems.map((item, index) => (
@@ -224,6 +327,18 @@ const TouristDetailPage = () => {
               <button className="map-button">
                 <Navigation size={20} />
                 네이버 지도로 보기
+              </button>
+            </div>
+
+            {/* Special Offer Card */}
+            <div className="content-card special-offer-card">
+              <div className="offer-badge">특별 혜택</div>
+              <h3 className="offer-title">지금 예약하면 20% 할인!</h3>
+              <p className="offer-description">
+                이 관광지 근처 숙소 예약 시 특별 할인 혜택을 받을 수 있습니다.
+              </p>
+              <button className="offer-button">
+                예약하기
               </button>
             </div>
           </div>
