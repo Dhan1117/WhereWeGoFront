@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styles from './SurveyPage.module.scss';
-
+import SurveyForm from './SurveyForm/SurveyForm';
 // ──────────────────────────────────────────────────────────────────────────────
 // 고정 데이터
 const loadingMessages = [
@@ -277,15 +277,34 @@ export default function SurveyPage() {
           </div>
         )}
 
-        {/* (선택) 자세한 설문 폼은 필요 시 추가 */}
+        {/* (선택) 자세한 설문 폼*/}
         {stage === 'detailed' && (
           <div className={styles.resultsScreen}>
             <h2 className={styles.resultsTitle}>자세한 설문</h2>
-            <p className="text-center text-gray-600 mb-8">간단 설문만 쓰실 거면 이 섹션은 생략 가능합니다.</p>
-            {/* …필요 시 폼 구성 … */}
-            <button type="button" onClick={handleRestartSurvey} className={styles.restartButton}>처음으로</button>
+            <SurveyForm
+              onSubmit={(answers) => {
+                // answers: travelType, budgetLevel, duration, activities, stayImportance, popularity, companion
+                navigate('/tourist-spot-recommend', {
+                  state: {
+                    mode: 'detailed',
+                    departureCity,
+                    otherCity,
+                    travelDuration,     // 간단/자세한 공통으로 잡고 가셔도 됩니다
+                    travelStartDate,
+                    startingPoint,
+                    // 간단 설문 선호도와 자세한 설문 응답을 모두 넘겨서 추천 페이지에서 활용
+                    preferences,
+                    detailed: answers,
+                  }
+                });
+              }}
+            />
+            <div style={{ textAlign: 'center', marginTop: 16 }}>
+              <button type="button" onClick={handleRestartSurvey} className={styles.restartButton}>처음으로</button>
+            </div>
           </div>
         )}
+
       </div>
     </div>
   );

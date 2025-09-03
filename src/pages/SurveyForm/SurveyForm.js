@@ -1,25 +1,37 @@
-//
+// src/pages/SurveyForm.jsx
 import React, { useState } from 'react';
 import './SurveyForm.scss';
 
 const travelTypes = ['자연 및 아웃도어', '문화 및 역사', '도시 관광', '휴양 및 힐링', '모험 및 액티비티'];
-const climates = ['따뜻하고 습한 열대 기후', '따뜻하고 건조한 기후', '온화한 사계절 기후', '서늘하거나 추운 기후'];
-const durations = ['1-3일', '4-7일', '8-14일', '15일 이상'];
-const companions = ['혼자 여행', '커플/부부', '가족(아이 포함)', '친구들과', '단체/투어'];
-const activities = ['등산', '수영/해변', '쇼핑', '역사 탐방', '현지 음식', '사진 촬영', '캠핑', '축제/이벤트', '예술/박물관', '스포츠', '야생동물 관찰', '휴식', '나이트라이프'];
+const durations   = ['1-3일', '4-7일', '8-14일', '15일 이상'];
+const companions  = ['혼자 여행', '커플/부부', '가족(아이 포함)', '친구들과', '단체/투어'];
+const activities  = ['등산', '수영/해변', '쇼핑', '역사 탐방', '현지 음식', '사진 촬영', '캠핑', '축제/이벤트', '예술/박물관', '스포츠', '야생동물 관찰', '휴식', '나이트라이프'];
 
-const SurveyForm = () => {
-  const [selectedTags, setSelectedTags] = useState([]);
+export default function SurveyForm({ defaultValues = {}, onSubmit }) {
+  const [travelType, setTravelType] = useState(defaultValues.travelType || '');
+  const [budgetLevel, setBudgetLevel] = useState(defaultValues.budgetLevel || 3);     // 1~5
+  const [duration, setDuration] = useState(defaultValues.duration || '');
+  const [selectedTags, setSelectedTags] = useState(defaultValues.activities || []);
+  const [stayImportance, setStayImportance] = useState(defaultValues.stayImportance || 3); // 1~5
+  const [popularity, setPopularity] = useState(defaultValues.popularity || 3);        // 1~5
+  const [companion, setCompanion] = useState(defaultValues.companion || '');
 
   const toggleTag = (tag) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
+    setSelectedTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    alert('설문이 제출되었습니다! 맞춤형 여행지를 분석 중입니다.');
+    const data = {
+      travelType,
+      budgetLevel: Number(budgetLevel),
+      duration,
+      activities: selectedTags,
+      stayImportance: Number(stayImportance),
+      popularity: Number(popularity),
+      companion,
+    };
+    if (typeof onSubmit === 'function') onSubmit(data);
   };
 
   return (
@@ -36,16 +48,30 @@ const SurveyForm = () => {
 
         <div className="question-block">
           <h3>1. 어떤 유형의 여행을 선호하시나요?</h3>
-          {travelTypes.map((type, i) => (
-            <label key={i} className="option-item">
-              <input type="radio" name="travel-type" value={type} />
+          {travelTypes.map((type) => (
+            <label key={type} className="option-item">
+              <input
+                type="radio"
+                name="travel-type"
+                value={type}
+                checked={travelType === type}
+                onChange={() => setTravelType(type)}
+              />
               {type}
             </label>
           ))}
         </div>
+
         <div className="question-block">
           <h3>2. 예산 범위는 어떻게 되시나요?</h3>
-          <input type="range" min="1" max="5" defaultValue="3" className="slider" />
+          <input
+            type="range"
+            min="1"
+            max="5"
+            value={budgetLevel}
+            onChange={(e) => setBudgetLevel(e.target.value)}
+            className="slider"
+          />
           <div className="slider-values">
             <span>저예산</span>
             <span>중간</span>
@@ -55,9 +81,15 @@ const SurveyForm = () => {
 
         <div className="question-block">
           <h3>3. 선호하는 여행 기간은?</h3>
-          {durations.map((d, i) => (
-            <label key={i} className="option-item">
-              <input type="radio" name="duration" value={d} />
+          {durations.map((d) => (
+            <label key={d} className="option-item">
+              <input
+                type="radio"
+                name="duration"
+                value={d}
+                checked={duration === d}
+                onChange={() => setDuration(d)}
+              />
               {d}
             </label>
           ))}
@@ -83,7 +115,14 @@ const SurveyForm = () => {
           <div className="rating">
             {[5, 4, 3, 2, 1].map((val) => (
               <React.Fragment key={val}>
-                <input type="radio" id={`star${val}`} name="rating" value={val} />
+                <input
+                  type="radio"
+                  id={`star${val}`}
+                  name="rating"
+                  value={val}
+                  checked={stayImportance === val}
+                  onChange={() => setStayImportance(val)}
+                />
                 <label htmlFor={`star${val}`}>{val}</label>
               </React.Fragment>
             ))}
@@ -92,7 +131,14 @@ const SurveyForm = () => {
 
         <div className="question-block">
           <h3>6. 얼마나 인기있는 관광지를 선호하시나요?</h3>
-          <input type="range" min="1" max="5" defaultValue="3" className="slider" />
+          <input
+            type="range"
+            min="1"
+            max="5"
+            value={popularity}
+            onChange={(e) => setPopularity(e.target.value)}
+            className="slider"
+          />
           <div className="slider-values">
             <span>한적한 곳</span>
             <span>적당히 붐비는 곳</span>
@@ -102,9 +148,15 @@ const SurveyForm = () => {
 
         <div className="question-block">
           <h3>7. 여행 동반자는?</h3>
-          {companions.map((c, i) => (
-            <label key={i} className="option-item">
-              <input type="radio" name="companion" value={c} />
+          {companions.map((c) => (
+            <label key={c} className="option-item">
+              <input
+                type="radio"
+                name="companion"
+                value={c}
+                checked={companion === c}
+                onChange={() => setCompanion(c)}
+              />
               {c}
             </label>
           ))}
@@ -118,6 +170,4 @@ const SurveyForm = () => {
       </form>
     </div>
   );
-};
-
-export default SurveyForm;
+}
