@@ -11,6 +11,7 @@ import { categoriesData } from './data/categoriesData'; // 실제 categoriesData
 import WishlistPage from './pages/WishlistPage';
 import { SearchProvider } from './SearchContext'; // 실제 SearchContext 경로로 수정 필요
 import SurveyPage from './pages/SurveyPage';
+import SurveyForm from './pages/SurveyForm/SurveyForm';
 import TouristDetailPage from './pages/TouristDetailPage';
 import TravelPlanPage from './pages/TravelPlanPage';
 import { WishlistProvider } from './contexts/WishlistContext'; // 경로 확인
@@ -71,6 +72,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/survey" element={<SurveyPage />} />
+                <Route path="/survey2" element={<SurveyForm />} />
                 <Route
                   path="/category"
                   element={
@@ -83,8 +85,8 @@ function App() {
                   path="/category/:categoryLabelFromUrl"
                   element={<CategoryDetailPage onSelectSubCategory={(subLabel) => console.log("선택된 소분류:", subLabel)} />}
                 />
-                <Route path="/sample-plan" element={<TravelPlanSamplePage />} />
-                <Route path="/sample-recommend" element={<TouristSpotRecommendPage />} /> {/* 부산 추천 페이지 */}
+                <Route path="/tourist-spot-recommend" element={<TouristSpotRecommendPage />} />
+                <Route path="/travel-plan" element={<TravelPlanSamplePage />} />
                 <Route path="/wishlist" element={<WishlistPage />} />
                 <Route path="/search" element={<SearchResultPage />} />
                 <Route path="/tourist/:id" element={<TouristDetailPage />} />

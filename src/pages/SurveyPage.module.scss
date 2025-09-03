@@ -442,3 +442,163 @@
   min-width: 20px;
   text-align: center;
 }
+/* 시작 화면 공통 */
+.startScreen {
+  text-align: center;
+  padding: 48px 20px 32px;
+}
+
+.startTitle {
+  font-size: clamp(28px, 3.6vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+
+.startSubtitle {
+  color: #6b7280; /* gray-500 */
+  margin: 0 0 28px;
+  font-size: 15px;
+}
+
+/* 카드 컨테이너 */
+.modeCards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 8px;
+}
+
+@media (max-width: 768px) {
+  .modeCards {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+/* 공통 카드 버튼 */
+.modeCard {
+  --ring: rgba(0, 0, 0, 0.06);
+  appearance: none;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  border-radius: 20px;
+  padding: 24px 24px 22px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,.04),
+    0 8px 24px rgba(0,0,0,.06);
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+  outline: none;
+}
+
+.modeCard:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 10px rgba(0,0,0,.06),
+    0 16px 36px rgba(0,0,0,.10);
+  filter: saturate(1.02);
+}
+
+.modeCard:focus-visible {
+  box-shadow:
+    0 0 0 4px var(--ring),
+    0 8px 24px rgba(0,0,0,.08);
+}
+
+/* 상단 작은 헤더 줄 */
+.modeCardHeader {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.modePill {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 9999px;
+  background: rgba(255,255,255,.4);
+  color: #111827;
+  border: 1px solid rgba(0,0,0,.06);
+  backdrop-filter: blur(6px);
+}
+
+/* 카드별 그라데이션 배경 */
+.modeCardSimple {
+  background:
+    radial-gradient(1200px 400px at 0% 0%, rgba(255, 221, 230, .55), transparent 60%),
+    linear-gradient(140deg, #fff, #fff);
+  border: 1px solid rgba(255, 107, 107, .18);
+}
+
+.modeCardDetailed {
+  background:
+    radial-gradient(1200px 400px at 100% 0%, rgba(221, 235, 255, .55), transparent 60%),
+    linear-gradient(140deg, #fff, #fff);
+  border: 1px solid rgba(33, 150, 243, .18);
+}
+
+/* 아이콘/타이틀/설명/CTA */
+.modeIcon {
+  font-size: clamp(40px, 6vw, 56px);
+  line-height: 1;
+  margin: 8px 0 10px;
+}
+
+.modeTitle {
+  font-size: clamp(20px, 2.6vw, 26px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+}
+
+.modeDesc {
+  color: #4b5563; /* gray-600 */
+  font-size: 14.5px;
+  line-height: 1.6;
+  margin: 0 0 14px;
+  word-break: keep-all;
+}
+
+.modeCta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: .01em;
+  color: white;
+  background: #ff6b6b;        /* 기본 CTA 컬러 */
+  box-shadow: 0 6px 16px rgba(255, 107, 107, .25);
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+
+/* 카드별 CTA 보색 */
+.modeCardSimple .modeCta {
+  background: #ff6b6b;
+  box-shadow: 0 6px 16px rgba(255, 107, 107, .25);
+}
+.modeCardDetailed .modeCta {
+  background: #2196f3;
+  box-shadow: 0 6px 16px rgba(33, 150, 243, .25);
+}
+
+.modeCard:hover .modeCta {
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+}
+
+/* 접근성 향상 */
+.modeCard:active {
+  transform: translateY(0);
+  filter: brightness(.98);
+}

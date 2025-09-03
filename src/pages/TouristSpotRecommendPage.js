@@ -1,5 +1,6 @@
 // src/pages/TouristSpotRecommendPage.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box, Paper, Typography, Grid, Card, CardContent, CardMedia,
   Chip, Rating, Button, TextField, InputAdornment, Stack,
@@ -292,6 +293,8 @@ const LS_EXPANDED_KEY = 'tsr_saved_panel_expanded_v1';
 const LS_PHOTO_CACHE_KEY = 'tsr_photo_cache_v1';
 
 const TouristSpotRecommendPage = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   // Google Places 로딩
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
@@ -299,7 +302,15 @@ const TouristSpotRecommendPage = () => {
     language: 'ko',
     region: 'KR',
   });
-
+  const goMakeCourse = () => {
+    // 담은 관광지와 설문 컨텍스트(state)를 같이 전달
+    navigate('/travel-plan', {
+      state: {
+        spots: selectedSpots,
+        ...location.state, // travelDuration, travelStartDate 등
+      }
+    });
+  };
   const placesDivRef = useRef(null);
   const placesServiceRef = useRef(null);
 
@@ -315,14 +326,14 @@ const TouristSpotRecommendPage = () => {
     try {
       const raw = localStorage.getItem(LS_PHOTO_CACHE_KEY);
       if (raw) return JSON.parse(raw);
-    } catch (_) {}
+    } catch (_) { }
     return {};
   });
   const setPhoto = useCallback((id, url) => {
     setPhotoMap(prev => {
       if (prev[id] === url) return prev;
       const next = { ...prev, [id]: url };
-      try { localStorage.setItem(LS_PHOTO_CACHE_KEY, JSON.stringify(next)); } catch (_) {}
+      try { localStorage.setItem(LS_PHOTO_CACHE_KEY, JSON.stringify(next)); } catch (_) { }
       return next;
     });
   }, []);
@@ -346,15 +357,15 @@ const TouristSpotRecommendPage = () => {
       const exp = localStorage.getItem(LS_EXPANDED_KEY);
       if (exp !== null) setExpanded(exp === 'true');
       else if (saved && JSON.parse(saved)?.length > 0) setExpanded(true);
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   // selectedSpots/expanded 변경 시 저장
   useEffect(() => {
-    try { localStorage.setItem(LS_SELECTED_KEY, JSON.stringify(selectedSpots)); } catch (_) {}
+    try { localStorage.setItem(LS_SELECTED_KEY, JSON.stringify(selectedSpots)); } catch (_) { }
   }, [selectedSpots]);
   useEffect(() => {
-    try { localStorage.setItem(LS_EXPANDED_KEY, expanded ? 'true' : 'false'); } catch (_) {}
+    try { localStorage.setItem(LS_EXPANDED_KEY, expanded ? 'true' : 'false'); } catch (_) { }
   }, [expanded]);
 
   // Google Places로 사진 가져오기 (이름 → textSearch → getDetails.photos[0])
@@ -847,7 +858,26 @@ const TouristSpotRecommendPage = () => {
                 </SelectedCard>
               );
             })
+
           )}
+          <Box sx={{ display: 'flex', gap: 1, mt: 2, justifyContent: 'flex-end' }}>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={clearSelected}
+              disabled={selectedSpots.length === 0}
+            >
+              전체 비우기
+            </Button>
+            <Button
+              variant="contained"
+              onClick={goMakeCourse}
+              disabled={selectedSpots.length === 0}
+              sx={{ backgroundColor: '#FF6B6B' }}
+            >
+              코스 짜기
+            </Button>
+          </Box>
         </AccordionDetails>
       </Accordion>
 
