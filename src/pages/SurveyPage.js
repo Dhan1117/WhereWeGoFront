@@ -1,311 +1,693 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import styles from './SurveyPage.module.scss';
-import SurveyForm from './SurveyForm/SurveyForm';
-// ──────────────────────────────────────────────────────────────────────────────
-// 고정 데이터
-const loadingMessages = [
-  "부산 여행 선호도를 분석하고 있습니다...",
-  "부산의 명소들을 검색하고 있습니다...",
-  "당신에게 가장 적합한 부산 여행지를 찾고 있습니다...",
-  "맞춤형 부산 여행 추천을 생성하고 있습니다...",
-  "거의 완료되었습니다. 조금만 더 기다려주세요..."
-];
+// src/pages/SurveyPage.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardActions,
+  CardContent,
+  CardHeader,
+  Chip,
+  CircularProgress,
+  Container,
+  Divider,
+  FormControl,
+  Grid,
+  InputLabel,
+  Link as MLink,
+  MenuItem,
+  Select,
+  Snackbar,
+  Stack,
+  Typography,
+} from "@mui/material";
+import LoginIcon from "@mui/icons-material/Login";
+import GoogleIcon from "@mui/icons-material/Google";
+import ChatBubbleIcon from "@mui/icons-material/ChatBubble";
+import HowToVoteIcon from "@mui/icons-material/HowToVote";
+import TravelExploreIcon from "@mui/icons-material/TravelExplore";
+import LogoutIcon from "@mui/icons-material/Logout";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import ErrorIcon from "@mui/icons-material/Error";
+import ScienceIcon from "@mui/icons-material/Science";
+import SendIcon from "@mui/icons-material/Send";
+import ChecklistIcon from "@mui/icons-material/Checklist";
+import PendingIcon from "@mui/icons-material/Pending";
+import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined";
+import ThumbDownAltOutlinedIcon from "@mui/icons-material/ThumbDownAltOutlined";
+import PlaceIcon from "@mui/icons-material/Place";
 
-const facts = [
-  "해운대 해수욕장은 부산에서 가장 유명한 해변으로, 연간 약 1천만 명이 방문합니다.",
-  "감천문화마을은 색색의 집들이 산비탈에 늘어선 예술 마을로, '한국의 마추픽추'라 불립니다.",
-  "부산 국제영화제는 아시아에서 가장 큰 영화제 중 하나로, 매년 10월에 개최됩니다.",
-  "태종대는 부산의 남동쪽 끝에 위치한 해안 절벽으로, 수려한 자연 경관을 자랑합니다.",
-  "광안대교는 밤에 화려한 조명으로 빛나는 부산의 랜드마크입니다.",
-  "자갈치 시장은 한국 최대의 수산물 시장으로, 신선한 해산물을 맛볼 수 있습니다."
-];
+// ---------- 환경 변수 기반 API ORIGIN/BASE ----------
+/**
+ * REACT_APP_API_PREFIX 예시:
+ *   https://wherewego-backend-production.up.railway.app
+ */
+const API_PREFIX =
+  process.env.REACT_APP_API_PREFIX ||
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_PREFIX) ||
+  "http://localhost:8000";
 
-const majorCities = ["서울", "인천", "대전", "대구", "광주", "울산", "제주"];
+const API_BASE = `${API_PREFIX.replace(/\/$/, "")}/api/v1`;
+const GOOGLE_LOGIN_URL = `${API_BASE}/auth/google/login`;
+const KAKAO_LOGIN_URL = `${API_BASE}/auth/kakao/login`;
 
-const surveyAttractions = [
-  { id: 1, name: "해운대", description: "넓은 백사장과 푸른 바다가 아름다운 부산의 대표 해수욕장", category: "해변", lat: 35.1587, lng: 129.1606, duration: 3 },
-  { id: 2, name: "광안리", description: "광안대교 야경과 트렌디한 카페, 맛집이 어우러진 활기찬 해변", category: "해변", lat: 35.1532, lng: 129.1197, duration: 2 },
-  { id: 3, name: "감천문화마을", description: "형형색색의 집들이 계단식으로 늘어선 아름다운 문화 예술 마을", category: "문화", lat: 35.0979, lng: 129.0108, duration: 2 },
-  { id: 4, name: "태종대", description: "기암절벽과 푸른 바다가 어우러진 부산의 아름다운 자연 공원", category: "자연", lat: 35.0518, lng: 129.0873, duration: 3 },
-  { id: 5, name: "부산역", description: "부산의 관문이자 교통의 중심지", category: "교통", lat: 35.1156, lng: 129.0423, duration: 0.5 },
-  { id: 6, name: "남포동", description: "부산의 대표적인 번화가이자 쇼핑 중심지", category: "쇼핑", lat: 35.0969, lng: 129.0286, duration: 2 },
-  { id: 7, name: "자갈치시장", description: "한국 최대의 수산물 시장으로 신선한 해산물을 맛볼 수 있는 곳", category: "음식", lat: 35.0969, lng: 129.0308, duration: 1.5 },
-  { id: 8, name: "용두산공원", description: "부산 시내를 한눈에 내려다볼 수 있는 전망 명소", category: "자연", lat: 35.1008, lng: 129.0324, duration: 1 }
-];
+// ---------- 공용 팔레트/스타일 토큰 ----------
+const tone = {
+  primary: "#4338CA", // indigo-600
+  primarySoft: "#EEF2FF", // indigo-50
+  accent: "#0D9488", // teal-600
+  paper: "#ffffff",
+  subtle: "#F7F7FB",
+  border: "#E6E8EF",
+  danger: "#DC2626",
+};
 
-const startingPoints = [
-  { id: '6870f39e748cc28771f1b2a7', name: '부산역' },
-  { id: '6870f39e748cc28771f1b2a8', name: '김해국제공항' },
-  { id: '6870f39e748cc28771f1b2a3', name: '부산서부시외버스터미널' },
-  { id: '6870f39e748cc28771f1b2a5', name: '사상시외버스터미널' },
-  { id: '6870f39e748cc28771f1b2a6', name: '부산종합버스터미널' },
-  { id: '6870f39e748cc28771f1b2a4', name: '부산항 국제여객터미널' }
-];
+// ---------- 공용 유틸 ----------
+async function apiCall(url, options = {}) {
+  const body = options.body ? JSON.stringify(options.body) : undefined;
+  const res = await fetch(url, {
+    method: options.method || "GET",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
+    body,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
 
-// ──────────────────────────────────────────────────────────────────────────────
+// ---------- 메인 컴포넌트 ----------
 export default function SurveyPage() {
   const navigate = useNavigate();
 
-  const [stage, setStage] = useState('start');   // 'start' | 'survey' | 'additionalInfo' | 'loading' | 'detailed'
-  const [surveyMode, setSurveyMode] = useState(null); // 'simple' | 'detailed' | null
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
 
-  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
-  const [factIndex, setFactIndex] = useState(0);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-
-  const [departureCity, setDepartureCity] = useState('서울');
-  const [otherCity, setOtherCity] = useState('');
-  const [travelDuration, setTravelDuration] = useState(2);
-  const [travelStartDate, setTravelStartDate] = useState('');
-  const [showOtherCityInput, setShowOtherCityInput] = useState(false);
-  const [startingPoint, setStartingPoint] = useState(startingPoints[0].id);
-
-  const [preferences, setPreferences] = useState({});
-  const [currentAttractionIndex, setCurrentAttractionIndex] = useState(0);
-
-  const totalAttractions = surveyAttractions.filter(a => a.category !== '교통').length;
-  const completedCount = Object.keys(preferences).length;
-
-  // 자세한 설문(옵션) 상태 — 필요시 사용
-  const [detailCategories, setDetailCategories] = useState({
-    해변: true, 자연: true, 문화: true, 쇼핑: false, 음식: true, 야경: true, 카페: false, 사찰: false, 가족형: false
+  // 로그인/설문 상태
+  const [loginStatus, setLoginStatus] = useState({
+    user_id: "",
+    logged_in: false,
+    has_survey_data: false,
+    has_votes: false,
+    status: "",
   });
 
+  // 설문 입력
+  const [activity, setActivity] = useState("");
+  const [activityLevel, setActivityLevel] = useState("");
+  const [time, setTime] = useState("");
+  const [season, setSeason] = useState("");
+  const [preference, setPreference] = useState("");
+
+  // 추천/투표
+  const [placeRecs, setPlaceRecs] = useState([]); // [{primary, alternative}, ...]
+  const [currentVotes, setCurrentVotes] = useState([]); // [{round, choice, item_name}]
+  const [mlRecs, setMlRecs] = useState([]); // 20곳
+
   useEffect(() => {
-    const today = new Date();
-    setTravelStartDate(today.toISOString().split('T')[0]);
+    handleCheckLogin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (stage === 'loading') {
-      const a = setInterval(() => setLoadingMessageIndex(p => (p + 1) % loadingMessages.length), 2000);
-      const b = setInterval(() => setFactIndex(p => (p + 1) % facts.length), 4000);
-      const c = setInterval(() => setLoadingProgress(p => Math.min(p + 5, 95)), 500);
-      return () => { clearInterval(a); clearInterval(b); clearInterval(c); };
+  const showToast = (message, severity = "info") =>
+    setToast({ open: true, message, severity });
+
+  const closeToast = () => setToast((t) => ({ ...t, open: false }));
+
+  // ---------- 1) 로그인 확인/로그아웃 ----------
+  const handleCheckLogin = async () => {
+    setLoading(true);
+    try {
+      const resp = await apiCall(`${API_BASE}/survey/status`);
+      setLoginStatus(resp);
+      showToast(resp.logged_in ? "로그인됨" : "로그인 필요", resp.logged_in ? "success" : "warning");
+    } catch (e) {
+      showToast(`로그인 상태 확인 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
     }
-  }, [stage]);
-
-  // ── 모드 선택
-  const handleStartSimple = () => { setSurveyMode('simple'); setStage('survey'); setPreferences({}); setCurrentAttractionIndex(0); };
-  const handleStartDetailed = () => { setSurveyMode('detailed'); setStage('detailed'); };
-
-  // ── 공통 초기화
-  const handleRestartSurvey = () => {
-    setStage('start'); setSurveyMode(null);
-    setCurrentAttractionIndex(0); setPreferences({});
-    setDepartureCity('서울'); setOtherCity(''); setTravelDuration(2);
-    setTravelStartDate(new Date().toISOString().split('T')[0]);
-    setShowOtherCityInput(false); setStartingPoint(startingPoints[0].id);
-    setDetailCategories({ 해변: true, 자연: true, 문화: true, 쇼핑: false, 음식: true, 야경: true, 카페: false, 사찰: false, 가족형: false });
   };
 
-  const handleCityChange = (e) => {
-    const v = e.target.value; setDepartureCity(v); setShowOtherCityInput(v === '기타');
+  const handleLogout = async () => {
+    setLoading(true);
+    try {
+      await apiCall(`${API_BASE}/auth/logout`, { method: "POST" });
+      setLoginStatus({
+        user_id: "",
+        logged_in: false,
+        has_survey_data: false,
+        has_votes: false,
+        status: "",
+      });
+      showToast("로그아웃 완료", "success");
+    } catch (e) {
+      showToast(`로그아웃 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // ── 간단 설문 진행
-  const handlePreference = (pref) => {
-    const current = surveyAttractions.filter(a => a.category !== '교통')[currentAttractionIndex];
-    setPreferences(prev => ({ ...prev, [String(current.id)]: pref === 'like' }));
-    if (currentAttractionIndex < totalAttractions - 1) setCurrentAttractionIndex(i => i + 1);
-    else setStage('additionalInfo');
+  // ---------- 2) 설문 제출 / 상태 ----------
+  const handleSubmitSurvey = async () => {
+    const surveyData = {
+      activity,
+      activity_level: activityLevel,
+      time,
+      season,
+      preference,
+    };
+    if (!Object.values(surveyData).every(Boolean)) {
+      showToast("모든 설문 항목을 선택해 주세요.", "warning");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = await apiCall(`${API_BASE}/survey/submit`, {
+        method: "POST",
+        body: surveyData,
+      });
+      showToast(`설문 제출 완료: ${data.message}`, "success");
+      await handleCheckLogin();
+    } catch (e) {
+      showToast(`설문 제출 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // ── 간단 설문 → 추천 10개 페이지로 이동 (백엔드 호출 없이 state 전달)
-  const handleSubmitAdditionalInfo = () => {
-    navigate('/tourist-spot-recommend', {
-      state: {
-        mode: 'simple',
-        departureCity,
-        otherCity,
-        travelDuration,
-        travelStartDate,
-        startingPoint,
-        preferences,
-        surveyAttractions: surveyAttractions.map(a => String(a.id))
-      }
+  const handleSurveyStatus = async () => {
+    setLoading(true);
+    try {
+      const resp = await apiCall(`${API_BASE}/survey/status`);
+      setLoginStatus(resp);
+
+      let msg = `로그인: ${resp.logged_in ? "완료" : "미완료"}\n설문: ${
+        resp.has_survey_data ? "완료" : "미완료"
+      }\n투표: ${resp.has_votes ? "완료" : "미완료"}\n전체 상태: ${resp.status || "-"}`;
+      showToast(msg, resp.has_survey_data ? "success" : "info");
+    } catch (e) {
+      showToast(`설문 상태 확인 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---------- 3) 장소 추천 / 투표 ----------
+  const handlePlaceRecs = async () => {
+    setLoading(true);
+    try {
+      const resp = await apiCall(`${API_BASE}/survey/place-recommendations`);
+      setPlaceRecs(resp.recommendations || []);
+      setCurrentVotes([]);
+      showToast("장소 추천 완료", "success");
+    } catch (e) {
+      showToast(`장소 추천 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectVote = (roundIndex, choice, itemName) => {
+    setCurrentVotes((prev) => {
+      const copy = [...prev];
+      copy[roundIndex] = { round: roundIndex + 1, choice, item_name: itemName };
+      return copy;
     });
   };
 
-  const currentAttraction = stage === 'survey'
-    ? surveyAttractions.filter(a => a.category !== '교통')[currentAttractionIndex]
-    : null;
+  const isSelected = (roundIdx, which, name) => {
+    const v = currentVotes[roundIdx];
+    return v && v.choice === which && v.item_name === name;
+  };
 
-  // ────────────────────────────────────────────────────────────────────────────
+  const handleSubmitVotes = async () => {
+    if (!placeRecs?.length) {
+      showToast("먼저 장소 추천을 받으세요.", "warning");
+      return;
+    }
+    if (currentVotes.filter(Boolean).length < placeRecs.length) {
+      showToast("모든 라운드에 투표해 주세요.", "warning");
+      return;
+    }
+    setLoading(true);
+    try {
+      const resp = await apiCall(`${API_BASE}/survey/votes`, {
+        method: "POST",
+        body: { votes: currentVotes },
+      });
+      showToast(`투표 제출 완료: ${resp.message}`, "success");
+      await handleCheckLogin();
+    } catch (e) {
+      showToast(`투표 제출 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---------- 4) ML 추천 ----------
+  const handleMLRecs = async () => {
+    setLoading(true);
+    try {
+      const resp = await apiCall(`${API_BASE}/survey/ml-recommendations`);
+      setMlRecs(resp.recommendations || []);
+      showToast("ML 추천 완료 (20곳)", "success");
+    } catch (e) {
+      showToast(`ML 추천 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleModelStatus = async () => {
+    setLoading(true);
+    try {
+      const resp = await apiCall(`${API_BASE}/survey/model-status`);
+      showToast(`ML 모델 상태: ${resp.model_loaded ? "로드됨" : "로드되지 않음"}`, "info");
+    } catch (e) {
+      showToast(`모델 상태 확인 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---------- 5) 초기화 / 테스트 ----------
+  const handleResetAll = async () => {
+    if (!window.confirm("모든 설문/투표 데이터를 삭제하시겠습니까?")) return;
+    setLoading(true);
+    try {
+      const resp = await apiCall(`${API_BASE}/survey/reset`, { method: "DELETE" });
+      showToast(`데이터 초기화 완료: ${resp.message}`, "success");
+      setPlaceRecs([]);
+      setCurrentVotes([]);
+      setMlRecs([]);
+      await handleCheckLogin();
+    } catch (e) {
+      showToast(`초기화 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTestGet = async () => {
+    setLoading(true);
+    try {
+      const resp = await apiCall(`${API_BASE}/survey/test`);
+      showToast(`GET 테스트 성공: ${JSON.stringify(resp)}`, "success");
+    } catch (e) {
+      showToast(`GET 테스트 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTestPost = async () => {
+    setLoading(true);
+    try {
+      const resp = await apiCall(`${API_BASE}/survey/test-post`, {
+        method: "POST",
+        body: { test: "데이터", number: 123, array: [1, 2, 3] },
+      });
+      showToast(`POST 테스트 성공: ${JSON.stringify(resp)}`, "success");
+    } catch (e) {
+      showToast(`POST 테스트 실패: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---------- 렌더 ----------
   return (
-    <div className={styles.container}>
-      <div className={styles.contentWrapper}>
+    <Box sx={{ bgcolor: tone.subtle, minHeight: "100vh", py: 6 }}>
+      <Container maxWidth="lg">
+        {/* 헤더 */}
+        <Card
+          elevation={0}
+          sx={{
+            mb: 4,
+            border: `1px solid ${tone.border}`,
+            background: `linear-gradient(120deg, ${tone.primarySoft}, #F0FDFA)`,
+          }}
+        >
+          <CardContent>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+              <Box>
+                <Typography variant="h4" fontWeight={800} color={tone.primary}>
+                  🗺️ WhereWeGo 설문 시스템
+                </Typography>
+                <Typography variant="body1" sx={{ opacity: 0.8, mt: 0.5 }}>
+                  JWT 토큰 기반 보안 설문·추천 테스트
+                </Typography>
+              </Box>
+              <Stack direction="row" spacing={1}>
+                <Chip
+                  color={loginStatus.logged_in ? "success" : "default"}
+                  label={loginStatus.logged_in ? "로그인됨" : "로그아웃"}
+                  variant="filled"
+                />
+                {loading && <CircularProgress size={24} />}
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
 
-        {/* 시작: 모드 선택 */}
-        {stage === 'start' && (
-          <div className={styles.startScreen}>
-            <h1 className={styles.startTitle}>부산 여행 스타일 찾기</h1>
-            <p className={styles.startSubtitle}>원하는 설문 방식을 선택하세요.</p>
+        <Grid container spacing={3}>
+          {/* 로그인 카드 */}
+          <Grid item xs={12} md={6}>
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader
+                avatar={<LoginIcon color="primary" />}
+                title="1. 로그인"
+                subheader="Google 또는 Kakao로 로그인하세요"
+              />
+              <CardContent>
+                {loginStatus.logged_in ? (
+                  <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ mb: 2 }}>
+                    로그인됨 — 설문:{' '}
+                    <b>{loginStatus.has_survey_data ? "완료" : "미완료"}</b>, 투표:{' '}
+                    <b>{loginStatus.has_votes ? "완료" : "미완료"}</b>
+                  </Alert>
+                ) : (
+                  <Alert icon={<ErrorIcon fontSize="inherit" />} severity="warning" sx={{ mb: 2 }}>
+                    로그인되어 있지 않습니다.
+                  </Alert>
+                )}
 
-            <div className={styles.modeCards}>
-              {/* 간단 설문 카드 */}
-              <button
-                type="button"
-                onClick={handleStartSimple}
-                className={`${styles.modeCard} ${styles.modeCardSimple}`}
-                aria-label="간단한 설문 시작"
-              >
-                <div className={styles.modeCardHeader}>
-                  <span className={styles.modePill}>추천 속도 ↑</span>
-                </div>
-                <div className={styles.modeIcon} aria-hidden>👍</div>
-                <h3 className={styles.modeTitle}>간단한 설문</h3>
-                <p className={styles.modeDesc}>
-                  명소 카드를 보며 <b>좋아요/모르겠어요/싫어요</b>만 선택<br />
-                  빠르게 10개씩 추천 받아요.
-                </p>
-                <div className={styles.modeCta}>시작하기</div>
-              </button>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  <Button
+                    startIcon={<GoogleIcon />}
+                    variant="contained"
+                    color="primary"
+                    onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}
+                  >
+                    Google 로그인
+                  </Button>
+                  <Button
+                    startIcon={<ChatBubbleIcon />}
+                    variant="outlined"
+                    color="primary"
+                    onClick={() => (window.location.href = KAKAO_LOGIN_URL)}
+                  >
+                    Kakao 로그인
+                  </Button>
+                </Stack>
+              </CardContent>
+              <CardActions sx={{ justifyContent: "space-between" }}>
+                <Button size="small" onClick={handleCheckLogin}>
+                  상태 새로고침
+                </Button>
+                <Button size="small" color="error" startIcon={<LogoutIcon />} onClick={handleLogout}>
+                  로그아웃
+                </Button>
+              </CardActions>
+            </Card>
+          </Grid>
 
-              {/* 자세한 설문 카드 */}
-              <button
-                type="button"
-                onClick={handleStartDetailed}
-                className={`${styles.modeCard} ${styles.modeCardDetailed}`}
-                aria-label="자세한 설문 시작"
-              >
-                <div className={styles.modeCardHeader}>
-                  <span className={styles.modePill}>정밀도 ↑</span>
-                </div>
-                <div className={styles.modeIcon} aria-hidden>🧭</div>
-                <h3 className={styles.modeTitle}>자세한 설문</h3>
-                <p className={styles.modeDesc}>
-                  취향·예산·동행·시간대 등 <b>세부 설정</b>으로<br />
-                  더 정교한 코스를 만들어 보세요.
-                </p>
-                <div className={styles.modeCta}>시작하기</div>
-              </button>
-            </div>
-          </div>
-        )}
+          {/* 설문 카드 */}
+          <Grid item xs={12} md={6}>
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader
+                avatar={<ChecklistIcon color="primary" />}
+                title="2. 설문조사"
+                subheader="여행 선호를 선택하세요"
+              />
+              <CardContent>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>활동 유형</InputLabel>
+                      <Select label="활동 유형" value={activity} onChange={(e) => setActivity(e.target.value)}>
+                        <MenuItem value=""><em>선택</em></MenuItem>
+                        {["자연풍경","자연산림","관람및체험","휴양","테마거리","예술감상","공연관람","트레킹"].map(v => (
+                          <MenuItem key={v} value={v}>{v}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
 
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>활동 수준</InputLabel>
+                      <Select label="활동 수준" value={activityLevel} onChange={(e) => setActivityLevel(e.target.value)}>
+                        <MenuItem value=""><em>선택</em></MenuItem>
+                        <MenuItem value="낮음">낮음</MenuItem>
+                        <MenuItem value="보통">보통</MenuItem>
+                        <MenuItem value="높음">높음</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
 
-        {/* 로딩 */}
-        {stage === 'loading' && (
-          <div className={styles.loadingScreen}>
-            <h2 className={styles.loadingTitle}>분석 중...</h2>
-            <div className={styles.loadingProgressContainer}>
-              <div className={styles.loadingProgressBar} style={{ width: `${loadingProgress}%` }} />
-            </div>
-            <p className={styles.loadingMessage}>{loadingMessages[loadingMessageIndex]}</p>
-            <div className={styles.factBox}>
-              <h3 className={styles.factTitle}>알고 계셨나요?</h3>
-              <p className={styles.factText}>{facts[factIndex]}</p>
-            </div>
-          </div>
-        )}
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>시간대</InputLabel>
+                      <Select label="시간대" value={time} onChange={(e) => setTime(e.target.value)}>
+                        <MenuItem value=""><em>선택</em></MenuItem>
+                        <MenuItem value="오전">오전</MenuItem>
+                        <MenuItem value="오후">오후</MenuItem>
+                        <MenuItem value="저녁">저녁</MenuItem>
+                        <MenuItem value="밤">밤</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
 
-        {/* 간단 설문 후 추가 정보 */}
-        {stage === 'additionalInfo' && surveyMode === 'simple' && (
-          <div className={styles.resultsScreen}>
-            <h2 className={styles.resultsTitle}>추가 정보 입력</h2>
-            <div className="space-y-6 max-w-2xl mx-auto">
-              <div className={styles.infoItem}>
-                <label className={styles.infoLabel}>출발 도시</label>
-                <select className={styles.infoSelect} value={departureCity} onChange={handleCityChange}>
-                  {majorCities.map(c => <option key={c} value={c}>{c}</option>)}
-                  <option value="기타">기타</option>
-                </select>
-              </div>
-              {showOtherCityInput && (
-                <div className={styles.infoItem}>
-                  <label className={styles.infoLabel}>출발 도시명 입력</label>
-                  <input type="text" className={styles.infoInput} value={otherCity}
-                    onChange={(e) => setOtherCity(e.target.value)} placeholder="도시명을 입력하세요" />
-                </div>
-              )}
-              <div className={styles.infoItem}>
-                <label className={styles.infoLabel}>부산 내 출발지</label>
-                <select className={styles.infoSelect} value={startingPoint} onChange={(e) => setStartingPoint(e.target.value)}>
-                  {startingPoints.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div className={styles.infoItem}>
-                <label className={styles.infoLabel}>여행 시작일</label>
-                <input type="date" className={styles.infoInput} value={travelStartDate}
-                  onChange={(e) => setTravelStartDate(e.target.value)} />
-              </div>
-              <div className={styles.infoItem}>
-                <label className={styles.infoLabel}>여행 기간 (일)</label>
-                <div className={styles.durationControl}>
-                  <button type="button" className={styles.durationButton} onClick={() => setTravelDuration(p => Math.max(1, p - 1))}>-</button>
-                  <span className={styles.durationValue}>{travelDuration}</span>
-                  <button type="button" className={styles.durationButton} onClick={() => setTravelDuration(p => p + 1)}>+</button>
-                </div>
-              </div>
-              <div className="flex gap-4 justify-center pt-4">
-                <button type="button" onClick={handleSubmitAdditionalInfo} className={styles.startButton}>여행 코스 생성하기</button>
-                <button type="button" onClick={handleRestartSurvey} className={styles.restartButton}>처음으로</button>
-              </div>
-            </div>
-          </div>
-        )}
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>계절</InputLabel>
+                      <Select label="계절" value={season} onChange={(e) => setSeason(e.target.value)}>
+                        <MenuItem value=""><em>선택</em></MenuItem>
+                        <MenuItem value="봄">봄</MenuItem>
+                        <MenuItem value="여름">여름</MenuItem>
+                        <MenuItem value="가을">가을</MenuItem>
+                        <MenuItem value="겨울">겨울</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
 
-        {/* 간단 설문 진행 화면 */}
-        {stage === 'survey' && surveyMode === 'simple' && (
-          <div className={styles.surveyScreen}>
-            <div className={styles.progressBarContainer}>
-              <div className={styles.progressBar} style={{ width: `${(completedCount / totalAttractions) * 100}%` }} />
-            </div>
-            <div className={styles.questionCounter}>{currentAttractionIndex + 1} / {totalAttractions}</div>
-            {currentAttraction && (
-              <div className={styles.attractionCard}>
-                <img src={`/image/${currentAttraction.id}.jpg`} alt={currentAttraction.name} className={styles.attractionImage} />
-                <div className={styles.attractionOverlay}>
-                  <h2 className={styles.attractionName}>{currentAttraction.name}</h2>
-                  <p className={styles.attractionDescription}>{currentAttraction.description}</p>
-                </div>
-              </div>
-            )}
-            <div className={styles.preferenceButtons}>
-              <button onClick={() => handlePreference('like')} className={`${styles.preferenceButton} ${styles.likeButton}`}>
-                <span className={styles.buttonIcon}>👍</span><span className={styles.buttonText}>좋아요</span>
-              </button>
-              <button onClick={() => handlePreference('neutral')} className={`${styles.preferenceButton} ${styles.neutralButton}`}>
-                <span className={styles.buttonIcon}>🤔</span><span className={styles.buttonText}>모르겠어요</span>
-              </button>
-              <button onClick={() => handlePreference('dislike')} className={`${styles.preferenceButton} ${styles.dislikeButton}`}>
-                <span className={styles.buttonIcon}>👎</span><span className={styles.buttonText}>싫어요</span>
-              </button>
-            </div>
-          </div>
-        )}
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>선호도</InputLabel>
+                      <Select label="선호도" value={preference} onChange={(e) => setPreference(e.target.value)}>
+                        <MenuItem value=""><em>선택</em></MenuItem>
+                        <MenuItem value="활동성">활동성</MenuItem>
+                        <MenuItem value="휴식">휴식</MenuItem>
+                        <MenuItem value="문화">문화</MenuItem>
+                        <MenuItem value="자연">자연</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+              </CardContent>
+              <CardActions>
+                <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>
+                  설문 제출
+                </Button>
+                <Button onClick={handleSurveyStatus} variant="text" startIcon={<PendingIcon />}>
+                  설문 상태 확인
+                </Button>
+              </CardActions>
+            </Card>
+          </Grid>
 
-        {/* (선택) 자세한 설문 폼*/}
-        {stage === 'detailed' && (
-          <div className={styles.resultsScreen}>
-            <h2 className={styles.resultsTitle}>자세한 설문</h2>
-            <SurveyForm
-              onSubmit={(answers) => {
-                // answers: travelType, budgetLevel, duration, activities, stayImportance, popularity, companion
-                navigate('/tourist-spot-recommend', {
-                  state: {
-                    mode: 'detailed',
-                    departureCity,
-                    otherCity,
-                    travelDuration,    
-                    travelStartDate,
-                    startingPoint,
-                    // 간단 설문 선호도와 자세한 설문 응답을 모두 넘겨서 추천 페이지에서 활용
-                    preferences,
-                    detailed: answers,
-                  }
-                });
-              }}
-            />
-            <div style={{ textAlign: 'center', marginTop: 16 }}>
-              <button type="button" onClick={handleRestartSurvey} className={styles.restartButton}>처음으로</button>
-            </div>
-          </div>
-        )}
+          {/* 투표 카드 */}
+          <Grid item xs={12} md={7}>
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader
+                avatar={<HowToVoteIcon color="primary" />}
+                title="3. 투표 (라운드 선택)"
+                subheader="추천된 두 장소 중 선호하는 곳을 라운드별로 선택하세요"
+              />
+              <CardActions sx={{ px: 2, pt: 0 }}>
+                <Button onClick={handlePlaceRecs} variant="outlined" startIcon={<TravelExploreIcon />}>
+                  장소 추천 받기
+                </Button>
+                <Button onClick={handleSubmitVotes} variant="contained" startIcon={<HowToVoteIcon />}>
+                  투표 제출
+                </Button>
+              </CardActions>
 
-      </div>
-    </div>
+              <CardContent>
+                {!placeRecs.length ? (
+                  <Alert severity="info">아직 추천이 없습니다. “장소 추천 받기”를 눌러주세요.</Alert>
+                ) : (
+                  <Stack spacing={2} divider={<Divider />}>
+                    {placeRecs.map((round, idx) => (
+                      <Box key={idx}>
+                        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                          라운드 {idx + 1}
+                        </Typography>
+                        <Grid container spacing={2}>
+                          {/* Primary */}
+                          <Grid item xs={12} md={6}>
+                            <Card
+                              variant="outlined"
+                              onClick={() => selectVote(idx, "primary", round?.primary?.name || "Primary")}
+                              sx={{
+                                borderColor: isSelected(idx, "primary", round?.primary?.name) ? tone.accent : tone.border,
+                                cursor: "pointer",
+                                "&:hover": { borderColor: tone.primary },
+                              }}
+                            >
+                              <CardContent>
+                                <Stack direction="row" alignItems="center" spacing={1}>
+                                  <PlaceIcon sx={{ color: tone.primary }} />
+                                  <Typography variant="subtitle1" fontWeight={700}>
+                                    {round?.primary?.name || "Primary"}
+                                  </Typography>
+                                </Stack>
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                  📍 {round?.primary?.address || "-"}
+                                </Typography>
+                                <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                                  🏷️ {round?.primary?.category || "-"}
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          </Grid>
+
+                          {/* Alternative */}
+                          <Grid item xs={12} md={6}>
+                            <Card
+                              variant="outlined"
+                              onClick={() =>
+                                selectVote(idx, "alternative", round?.alternative?.name || "Alternative")
+                              }
+                              sx={{
+                                borderColor: isSelected(idx, "alternative", round?.alternative?.name)
+                                  ? tone.accent
+                                  : tone.border,
+                                cursor: "pointer",
+                                "&:hover": { borderColor: tone.primary },
+                              }}
+                            >
+                              <CardContent>
+                                <Stack direction="row" alignItems="center" spacing={1}>
+                                  <PlaceIcon sx={{ color: tone.primary }} />
+                                  <Typography variant="subtitle1" fontWeight={700}>
+                                    {round?.alternative?.name || "Alternative"}
+                                  </Typography>
+                                </Stack>
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                  📍 {round?.alternative?.address || "-"}
+                                </Typography>
+                                <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                                  🏷️ {round?.alternative?.category || "-"}
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          </Grid>
+                        </Grid>
+                      </Box>
+                    ))}
+                  </Stack>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* ML 추천 카드 */}
+          <Grid item xs={12} md={5}>
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader
+                avatar={<ScienceIcon color="primary" />}
+                title="4. ML 모델 추천 (20곳)"
+                subheader="설문과 투표를 기반으로 추천"
+              />
+              <CardActions sx={{ px: 2, pt: 0 }}>
+                <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>
+                  ML 추천 받기
+                </Button>
+                <Button variant="text" onClick={handleModelStatus}>
+                  모델 상태 확인
+                </Button>
+              </CardActions>
+              <CardContent sx={{ maxHeight: 420, overflow: "auto" }}>
+                {!mlRecs.length ? (
+                  <Alert severity="info">아직 결과가 없습니다. “ML 추천 받기”를 눌러주세요.</Alert>
+                ) : (
+                  <Stack spacing={1.5}>
+                    {mlRecs.map((p, i) => (
+                      <Box
+                        key={i}
+                        sx={{
+                          p: 1.25,
+                          border: `1px solid ${tone.border}`,
+                          borderRadius: 1.5,
+                          bgcolor: tone.paper,
+                        }}
+                      >
+                        <Typography variant="subtitle2" fontWeight={700}>
+                          {i + 1}. {p.name || "이름 없음"}
+                        </Typography>
+                        <Typography variant="body2">📍 {p.address || "-"}</Typography>
+                        <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                          🏷️ {p.category || "-"}
+                        </Typography>
+                        <Typography variant="body2">⭐ 평점: {p.rating ?? "N/A"}</Typography>
+                        {p.description && (
+                          <Typography variant="body2" sx={{ mt: 0.5 }}>
+                            📝 {p.description}
+                          </Typography>
+                        )}
+                      </Box>
+                    ))}
+                  </Stack>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* 관리/테스트 */}
+          <Grid item xs={12}>
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader title="5. 관리 / 6. 테스트" />
+              <CardActions sx={{ px: 2, pb: 2 }}>
+                <Button color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll}>
+                  모든 데이터 초기화
+                </Button>
+                <Box sx={{ flexGrow: 1 }} />
+                <Button variant="text" onClick={handleTestGet}>
+                  GET 테스트
+                </Button>
+                <Button variant="text" onClick={handleTestPost}>
+                  POST 테스트
+                </Button>
+              </CardActions>
+            </Card>
+          </Grid>
+        </Grid>
+
+        {/* 하단 작은 도움말 */}
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 3 }}>
+          <Typography variant="caption" sx={{ opacity: 0.6 }}>
+            API Base: <MLink href={API_BASE} target="_blank" rel="noreferrer">{API_BASE}</MLink>
+          </Typography>
+          <Typography variant="caption" sx={{ opacity: 0.6 }}>
+            프론트는 쿠키 인증 사용(fetch credentials: include)
+          </Typography>
+        </Stack>
+      </Container>
+
+      {/* 토스트 */}
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={5000}
+        onClose={closeToast}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert onClose={closeToast} severity={toast.severity} sx={{ width: "100%" }}>
+          <span style={{ whiteSpace: "pre-line" }}>{toast.message}</span>
+        </Alert>
+      </Snackbar>
+    </Box>
   );
 }

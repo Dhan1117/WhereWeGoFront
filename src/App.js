@@ -22,35 +22,24 @@ import DetailedSurveyPage from './pages/DetailedSurveyPage';
 
 const theme = createTheme({
   palette: {
-    primary: { main: '#ff1150' },
-    secondary: { main: '#ff6f61' },
-  },
-  typography: { fontFamily: `'Pretendard', sans-serif` },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          borderRadius: 30,
-          fontWeight: 'bold',
-          transition: '0.3s',
-        },
-        containedPrimary: {
-          backgroundColor: '#ff1150',
-          color: '#fff',
-          '&:hover': { backgroundColor: '#ff6f61' },
-        },
-        outlinedPrimary: {
-          borderColor: '#ff1150',
-          color: '#ff1150',
-          '&:hover': { borderColor: '#ff6f61', color: '#ff6f61' },
-        },
-        textPrimary: {
-          color: '#ff1150',
-          '&:hover': { backgroundColor: 'rgba(255, 17, 80, 0.08)' },
-        },
-      },
+    primary: {
+      main: "#667eea",   // 보라-파랑
     },
+    secondary: {
+      main: "#764ba2",   // 진한 보라
+    },
+    success: {
+      main: "#4caf50",   // 연한 초록 (성공 메시지용)
+    },
+    error: {
+      main: "#f44336",   // 에러는 살짝만
+    },
+    background: {
+      default: "#f9f9fc", // 전체 배경 톤 다운
+    },
+  },
+  typography: {
+    fontFamily: "'Segoe UI', 'Roboto', 'Noto Sans KR', sans-serif",
   },
 });
 
