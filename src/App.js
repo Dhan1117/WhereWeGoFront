@@ -18,6 +18,7 @@ import { WishlistProvider } from './contexts/WishlistContext'; // 경로 확인
 import TravelPlanSamplePage from "./pages/TravelPlanSamplePage";
 import TouristSpotRecommendPage from "./pages/TouristSpotRecommendPage"; // 추가
 import { ItineraryProvider } from './contexts/ItineraryContext'; // 
+import DetailedSurveyPage from './pages/DetailedSurveyPage';
 
 const theme = createTheme({
   palette: {
@@ -85,6 +86,9 @@ function App() {
                   path="/category/:categoryLabelFromUrl"
                   element={<CategoryDetailPage onSelectSubCategory={(subLabel) => console.log("선택된 소분류:", subLabel)} />}
                 />
+                <Route path="/detailed-survey" element={<DetailedSurveyPage />} />
+
+
                 <Route path="/tourist-spot-recommend" element={<TouristSpotRecommendPage />} />
                 <Route path="/travel-plan" element={<TravelPlanSamplePage />} />
                 <Route path="/wishlist" element={<WishlistPage />} />

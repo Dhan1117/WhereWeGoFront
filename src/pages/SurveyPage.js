@@ -289,7 +289,7 @@ export default function SurveyPage() {
                     mode: 'detailed',
                     departureCity,
                     otherCity,
-                    travelDuration,     // 간단/자세한 공통으로 잡고 가셔도 됩니다
+                    travelDuration,    
                     travelStartDate,
                     startingPoint,
                     // 간단 설문 선호도와 자세한 설문 응답을 모두 넘겨서 추천 페이지에서 활용
