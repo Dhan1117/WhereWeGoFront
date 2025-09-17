@@ -26,10 +26,10 @@ import axios from "axios";
 import { listPlans, savePlan, getPlan, deletePlan } from "../utils/planStorage";
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 공통 no-wrap 스타일
+// 공통 no-wrap 스타일 (변경 없음)
 const noWrapSx = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
 
-// 스타일
+// 스타일 (변경 없음)
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   borderRadius: theme.spacing(2),
@@ -74,7 +74,7 @@ const DayTabContainer = styled(Box)(({ theme }) => ({
   "&::-webkit-scrollbar-thumb:hover": { background: "#a8a8a8" },
 }));
 
-// Day 버튼
+// Day 버튼 (변경 없음)
 const CompactDayButton = styled(
   Button,
   { shouldForwardProp: (prop) => prop !== "active" }
@@ -92,7 +92,7 @@ const CompactDayButton = styled(
 }));
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 좌표 샘플(초기값) — 백엔드 응답으로 동적 보완
+// 좌표 샘플(초기값) — 백엔드 응답으로 동적 보완 (변경 없음)
 const BUSAN_CENTER = { lat: 35.1796, lng: 129.0756 };
 const SPOT_COORDS = {
   "해운대 해수욕장": { lat: 35.1587, lng: 129.1604 },
@@ -113,14 +113,13 @@ const SPOT_COORDS = {
   "기장시장": { lat: 35.2445, lng: 129.2223 },
 };
 
-// ★ (선택) 고정 매핑: 필요하면 유지
+// (선택) 고정 매핑 (변경 없음)
 const BACKEND_IDS = {
   "태종대": "681891fa77e67d6ebadae372",
-  // 필요 시 추가…
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 간단 유틸
+// 간단 유틸 (변경 없음)
 const toLatLng = (g) => ({ lat: g.lat(), lng: g.lng() });
 const haversine = (a, b) => {
   const R = 6371e3;
@@ -135,7 +134,7 @@ const haversine = (a, b) => {
 // 백엔드 연동 유틸
 const API_BASE = "http://localhost:8000/api/v1";
 
-// 일정 생성
+// 일정 생성 (변경 없음)
 async function generateItinerary(requestData) {
   try {
     const res = await fetch(`${API_BASE}/generate`, {
@@ -151,7 +150,7 @@ async function generateItinerary(requestData) {
   }
 }
 
-// 안전 JSON fetch
+// 안전 JSON fetch (변경 없음)
 async function safeFetchJson(url) {
   try {
     const r = await fetch(url, { mode: "cors" });
@@ -162,7 +161,7 @@ async function safeFetchJson(url) {
   }
 }
 
-// 주변 카페/식당(백엔드)
+// 주변 카페/식당(백엔드) (변경 없음)
 async function getNearbyCafesBE(placeId, maxDistance = 2.0) {
   return (await safeFetchJson(`${API_BASE}/nearby/cafes/${placeId}?max_distance=${maxDistance}`)) || [];
 }
@@ -170,7 +169,18 @@ async function getNearbyRestaurantsBE(placeId, maxDistance = 1.5) {
   return (await safeFetchJson(`${API_BASE}/nearby/restaurants/${placeId}?max_distance=${maxDistance}`)) || [];
 }
 
-// 백엔드 응답 → 화면용 포맷
+// [추가] 주변 관광지(백엔드)
+async function getNearbyPlacesBE(placeId, maxDistance = 5.0, includeCrowding = false) {
+  const url = `${API_BASE}/nearby/${placeId}?max_distance=${maxDistance}` + (includeCrowding ? `&include_crowding=true` : "");
+  return (await safeFetchJson(url)) || [];
+}
+
+// [추가] 혼잡도 조회
+async function getCrowding(placeId) {
+  return await safeFetchJson(`${API_BASE}/place/crowding/${placeId}`);
+}
+
+// 백엔드 응답 → 화면용 포맷 (음식/카페 공통) (변경 없음)
 function normalizeBackendPlaces(rows = [], center) {
   const out = [];
   for (const r of rows) {
@@ -194,45 +204,42 @@ function normalizeBackendPlaces(rows = [], center) {
   return out;
 }
 
-// ── 코스 API 래퍼 (axios)
+// [추가] 관광지 목록 포맷
+function normalizeNearbySights(rows = [], center) {
+  return normalizeBackendPlaces(rows, center).map(r => ({
+    ...r,
+    // 관광지는 별도 태그만 다르게 쓸 수도 있음
+    isSight: true,
+  }));
+}
+
+// ── 코스 API 래퍼 (변경 없음)
 export const saveCourse = async (payload) => {
   const { data } = await axios.post(`${API_BASE}/save`, payload);
-  return data; // { course_id, ... }
+  return data;
 };
-
 export const listUserCourses = async (userId) => {
   const { data } = await axios.get(`${API_BASE}/user/${userId}`);
   return data;
 };
-
 export const getCourse = async (courseId) => {
   const { data } = await axios.get(`${API_BASE}/course/${courseId}`);
   return data;
 };
-
 export const getCourseAlt = async (courseId) => {
   const { data } = await axios.get(`${API_BASE}/courses/${courseId}`);
   return data;
 };
-
 export const addPlaceToCourse = async ({ course_id, day, place }) => {
-  const { data } = await axios.post(`${API_BASE}/courses/add-place`, {
-    course_id, day, place,
-  });
+  const { data } = await axios.post(`${API_BASE}/courses/add-place`, { course_id, day, place });
   return data;
 };
-
 export const updatePlaceInCourse = async ({ course_id, day, place_id, updates }) => {
-  const { data } = await axios.put(`${API_BASE}/courses/update-place`, {
-    course_id, day, place_id, updates,
-  });
+  const { data } = await axios.put(`${API_BASE}/courses/update-place`, { course_id, day, place_id, updates });
   return data;
 };
-
 export const removePlaceFromCourse = async ({ course_id, day, place_id }) => {
-  const { data } = await axios.delete(`${API_BASE}/courses/remove-place`, {
-    data: { course_id, day, place_id },
-  });
+  const { data } = await axios.delete(`${API_BASE}/courses/remove-place`, { data: { course_id, day, place_id } });
   return data;
 };
 
@@ -241,12 +248,13 @@ export default function TravelPlanSamplePage() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // 상태들 (대부분 변경 없음)
   const [activeDay, setActiveDay] = useState(0);
   const [expandedDays, setExpandedDays] = useState(new Set([0]));
-  const [panelTab, setPanelTab] = useState(0);
+  const [panelTab, setPanelTab] = useState(0);  // 0:개요 1:음식점 2:주변관광
   const [searchTerm, setSearchTerm] = useState("");
 
-  // 일정 데이터 (초기 샘플)
+  // 일정 데이터 (초기 샘플) (변경 없음)
   const [itineraryData, setItineraryData] = useState([
     { date: "2026. 8. 21.", dayName: "Day 1", places: [
       { id: "1", name: "감천문화마을", placeId: null, time: "14:00", icon: <MuseumIcon/> },
@@ -259,56 +267,56 @@ export default function TravelPlanSamplePage() {
     ]},
   ]);
 
-  // 선택 장소/주변 음식점
-  const [selectedPlace, setSelectedPlace] = useState(null); // { name, position, details, photoUrl, placeId, backendId }
+  // [추가] 주변 관광지/혼잡도 상태
+  const [nearbySights, setNearbySights] = useState([]);     // 주변 관광지 리스트
+  const [loadingSights, setLoadingSights] = useState(false);
+  const [crowding, setCrowding] = useState(null);           // { level, updated_at, ... } 가정
+
+  // 선택 장소/주변 음식점 (변경 없음)
+  const [selectedPlace, setSelectedPlace] = useState(null);
   const [nearbyFoods, setNearbyFoods] = useState([]);
   const [loadingFoods, setLoadingFoods] = useState(false);
-  const [foodSource, setFoodSource] = useState("google"); // 'backend' | 'google'
-  const loadSeqRef = useRef(0); // 응답 경쟁 방지
+  const [foodSource, setFoodSource] = useState("google");
+  const loadSeqRef = useRef(0);
 
-  // 음식점 탭: 5개씩 무한 스크롤
+  // 음식점 탭: 무한 스크롤 (변경 없음)
   const [displayCount, setDisplayCount] = useState(5);
   const sentinelRef = useRef(null);
-  useEffect(() => {
-    setDisplayCount(5);
-  }, [nearbyFoods, panelTab, selectedPlace?.backendId, foodSource]);
-
+  useEffect(() => { setDisplayCount(5); }, [nearbyFoods, panelTab, selectedPlace?.backendId, foodSource]);
   useEffect(() => {
     if (panelTab !== 1) return;
     const el = sentinelRef.current;
     if (!el) return;
-
     const io = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
         setDisplayCount((c) => Math.min(c + 5, nearbyFoods.length));
       }
     }, { root: null, rootMargin: "120px", threshold: 0 });
-
     io.observe(el);
     return () => io.disconnect();
   }, [panelTab, nearbyFoods.length]);
 
-  // 필터
+  // 필터 (변경 없음)
   const [openNowOnly, setOpenNowOnly] = useState(false);
   const [priceLevels, setPriceLevels] = useState([0,1,2,3,4]);
 
-  // 경로
+  // 경로 (변경 없음)
   const [route, setRoute] = useState(null);
   const [showRoute, setShowRoute] = useState(false);
 
-  // Google 객체/서비스
+  // Google 객체/서비스 (변경 없음)
   const mapRef = useRef(null);
   const placesServiceRef = useRef(null);
   const searchBoxRef = useRef(null);
 
-  // 캐시
+  // 캐시 (변경 없음)
   const detailCacheRef = useRef(new Map());
   const idCacheRef = useRef(new Map());
   const inFlightRef = useRef(new Set());
 
-  // ★ 동적 좌표/ID 저장 (백엔드 응답 보완)
+  // 동적 좌표/ID 저장 (변경 없음)
   const [dynamicBackendIds, setDynamicBackendIds] = useState({});
-  const spotCoordsRef = useRef({ ...SPOT_COORDS }); // 기존 좌표 + 동적 좌표
+  const spotCoordsRef = useRef({ ...SPOT_COORDS });
 
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "",
@@ -317,7 +325,7 @@ export default function TravelPlanSamplePage() {
     region: "KR",
   });
 
-  // planId로 불러오기
+  // planId로 불러오기 (변경 없음)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const planId = params.get("planId");
@@ -334,14 +342,12 @@ export default function TravelPlanSamplePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 저장/불러오기 UI
+  // 저장/불러오기 UI (변경 없음)
   const [openLoadDlg, setOpenLoadDlg] = useState(false);
   const [plans, setPlans] = useState([]);
   const [snack, setSnack] = useState({ open: false, msg: "" });
-
   const refreshPlans = () => setPlans(listPlans());
   useEffect(() => { refreshPlans(); }, []);
-
   const handleSavePlan = () => {
     const title = window.prompt("코스 이름을 입력하세요 (예: 부산 5박6일 핵심)");
     if (!title) return;
@@ -350,7 +356,6 @@ export default function TravelPlanSamplePage() {
     refreshPlans();
     setSnack({ open: true, msg: "코스가 저장되었습니다." });
   };
-
   const handleLoadPlan = (planId) => {
     const plan = getPlan(planId);
     if (!plan) return;
@@ -361,14 +366,13 @@ export default function TravelPlanSamplePage() {
     setRoute(null);
     setOpenLoadDlg(false);
   };
-
   const handleDeletePlan = (planId) => {
     if (!window.confirm("이 코스를 삭제할까요?")) return;
     deletePlan(planId);
     refreshPlans();
   };
 
-  // (샘플) 빠른 스팟 카드
+  // (샘플) 빠른 스팟 카드 (변경 없음)
   const touristSpots = useMemo(() => ([
     { name: "해운대 해수욕장", location: "부산광역시 해운대구", icon: <BeachAccessIcon/>, color: "#FF6B6B" },
     { name: "광안리 해변", location: "부산 해수욕장 중 하나", icon: <BeachAccessIcon/>, color: "#FF6B6B" },
@@ -383,15 +387,7 @@ export default function TravelPlanSamplePage() {
     setRoute(null);
   };
 
-  const toggleDayExpansion = (i, e) => {
-    e.stopPropagation();
-    setExpandedDays((prev) => {
-      const n = new Set(prev);
-      n.has(i) ? n.delete(i) : n.add(i);
-      return n;
-    });
-  };
-
+  // Places 서비스 (변경 없음)
   const ensurePlacesService = () => {
     if (!placesServiceRef.current && mapRef.current && window.google) {
       placesServiceRef.current = new window.google.maps.places.PlacesService(mapRef.current);
@@ -404,14 +400,11 @@ export default function TravelPlanSamplePage() {
       if (!placeId) return resolve(null);
       const cache = detailCacheRef.current.get(placeId);
       if (cache) return resolve(cache);
-
       const svc = ensurePlacesService();
       if (!svc) return resolve(null);
-
       const key = `id:${placeId}`;
       if (inFlightRef.current.has(key)) return resolve(null);
       inFlightRef.current.add(key);
-
       svc.getDetails(
         {
           placeId,
@@ -423,9 +416,7 @@ export default function TravelPlanSamplePage() {
         },
         (detail) => {
           inFlightRef.current.delete(key);
-          if (detail) {
-            detailCacheRef.current.set(placeId, detail);
-          }
+          if (detail) detailCacheRef.current.set(placeId, detail);
           resolve(detail || null);
         }
       );
@@ -435,21 +426,12 @@ export default function TravelPlanSamplePage() {
     new Promise((resolve) => {
       const svc = ensurePlacesService();
       if (!svc) return resolve(null);
-
       const cachedId = idCacheRef.current.get(name);
       if (cachedId) return getDetailsByPlaceId(cachedId).then(resolve);
-
       const key = `name:${name}`;
       if (inFlightRef.current.has(key)) return resolve(null);
       inFlightRef.current.add(key);
-
-      const request = {
-        query: name,
-        location: position || mapCenter,
-        radius: 3000,
-        language: "ko",
-      };
-
+      const request = { query: name, location: position || mapCenter, radius: 3000, language: "ko" };
       svc.textSearch(request, (results) => {
         inFlightRef.current.delete(key);
         const first = Array.isArray(results) && results.length ? results[0] : null;
@@ -463,88 +445,124 @@ export default function TravelPlanSamplePage() {
     new Promise((resolve) => {
       const svc = ensurePlacesService();
       if (!svc) return resolve([]);
-
       const request = {
-        location: centerLatLng,
-        radius: 900,
-        type: "restaurant",
-        language: "ko",
+        location: centerLatLng, radius: 900, type: "restaurant", language: "ko",
         openNow: openNowOnly || undefined,
         minPriceLevel: Math.min(...priceLevels),
         maxPriceLevel: Math.max(...priceLevels),
       };
-
-      svc.nearbySearch(request, (results) => {
-        const arr = (results || []).slice(0, 20);
-        resolve(arr);
-      });
+      svc.nearbySearch(request, (results) => resolve((results || []).slice(0, 20)));
     });
 
-  // ★ 동적 좌표 참조(백엔드 우선)
+  // ▼ 추천에서 넘어온 관광지(spots)를 일정에 바로 반영
+  async function enrichSpotsWithDetails(spots, center) {
+    const out = [];
+    for (const s of spots) {
+      let pos = spotCoordsRef.current[s.name];
+      let placeId = null;
+      let detail = null;
+
+      if (!pos) {
+        detail = await textSearchToDetails(s.name, center);
+        if (detail?.geometry?.location) {
+          const g = detail.geometry.location;
+          pos = { lat: g.lat(), lng: g.lng() };
+        }
+        if (detail?.place_id) placeId = detail.place_id;
+      }
+
+      if (pos) spotCoordsRef.current[s.name] = pos;
+
+      out.push({
+        id: s.id ?? `spot-${s.name}`,
+        name: s.name,
+        time: "",
+        placeId: placeId || null,
+        backendId: null,
+        address: s.address || detail?.formatted_address || "",
+        rating: typeof s.rating === "number" ? s.rating : (detail?.rating ?? null),
+      });
+    }
+    return out;
+  }
+
+  // [수정] 하루 최대 6개로 분배
+  function distributeIntoDays(items, days) {
+    if (!days || days < 1) days = 1;
+    const MAX_PER_DAY = 6;
+    const arr = [];
+    let idx = 0;
+    for (let d = 0; d < days; d++) {
+      const slice = items.slice(idx, idx + MAX_PER_DAY);
+      arr.push(slice);
+      idx += MAX_PER_DAY;
+    }
+    // 남은 아이템은 추가 일차로 자동 생성
+    while (idx < items.length) {
+      arr.push(items.slice(idx, idx + MAX_PER_DAY));
+      days += 1;
+      idx += MAX_PER_DAY;
+    }
+    return arr;
+  }
+
+  function timeForIndex(i) {
+    const base = 10 * 60;
+    const mins = base + i * 120;
+    const hh = String(Math.floor(mins / 60)).padStart(2, "0");
+    const mm = String(mins % 60).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+
+  // ★ 동적 좌표 참조(백엔드 우선) (변경 없음)
   const activeDayMarkers = useMemo(() => {
     const list = itineraryData[activeDay]?.places || [];
     return list
       .map((p, idx) => {
         const pos = spotCoordsRef.current[p.name];
-        return {
-          key: `day-${p.id}`,
-          title: p.name,
-          order: idx + 1,
-          position: pos,
-          placeId: p.placeId,
-        };
+        return { key: `day-${p.id}`, title: p.name, order: idx + 1, position: pos, placeId: p.placeId };
       })
       .filter((m) => !!m.position);
   }, [activeDay, itineraryData]);
 
   const quickSpotMarkers = useMemo(() => {
-    return touristSpots
-      .map((s, idx) => ({ key: `quick-${idx}`, title: s.name, order: idx + 1, position: spotCoordsRef.current[s.name], placeId: null }))
+    const spots = [ "해운대 해수욕장", "광안리 해변", "감천문화마을", "자갈치 시장" ];
+    return spots
+      .map((name, idx) => ({
+        key: `quick-${idx}`,
+        title: name,
+        order: idx + 1,
+        position: spotCoordsRef.current[name],
+        placeId: null
+      }))
       .filter((m) => !!m.position);
-  }, [touristSpots]);
+  }, []); // ← 이름 오타 없이 정의 (no-undef 해결)
 
+  // 지도 옵션/중심/맞춤 (변경 없음)
   const mapOptions = useMemo(() => ({
-    disableDefaultUI: false,
-    zoomControl: true,
-    mapTypeControl: false,
-    fullscreenControl: false,
-    streetViewControl: false,
+    disableDefaultUI: false, zoomControl: true, mapTypeControl: false,
+    fullscreenControl: false, streetViewControl: false,
   }), []);
   const mapCenter = useMemo(() => activeDayMarkers[0]?.position || BUSAN_CENTER, [activeDayMarkers]);
-
   const fitToMarkers = useCallback((markers) => {
     if (!mapRef.current || !window.google || markers.length === 0) return;
     const bounds = new window.google.maps.LatLngBounds();
     markers.forEach((m) => bounds.extend(m.position));
     mapRef.current.fitBounds(bounds, 80);
   }, []);
+  useEffect(() => { if (isLoaded) fitToMarkers(activeDayMarkers); }, [activeDay, isLoaded, fitToMarkers, activeDayMarkers]);
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    fitToMarkers(activeDayMarkers);
-  }, [activeDay, isLoaded, fitToMarkers, activeDayMarkers]);
-
+  // 경로 (변경 없음)
   const buildRouteFromActiveDay = async () => {
     const list = itineraryData[activeDay]?.places || [];
     const coords = list.map((p) => spotCoordsRef.current[p.name]).filter(Boolean);
-    if (coords.length < 2) {
-      setRoute(null);
-      setShowRoute(false);
-      return;
-    }
+    if (coords.length < 2) { setRoute(null); setShowRoute(false); return; }
     const ds = new window.google.maps.DirectionsService();
     const origin = coords[0];
     const destination = coords[coords.length - 1];
     const wp = coords.slice(1, -1).map((c) => ({ location: c, stopover: true }));
     ds.route(
-      {
-        origin,
-        destination,
-        waypoints: wp,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        optimizeWaypoints: false,
-        region: "KR",
-      },
+      { origin, destination, waypoints: wp, travelMode: window.google.maps.TravelMode.DRIVING, optimizeWaypoints: false, region: "KR" },
       (res) => {
         if (res) {
           setRoute(res);
@@ -553,14 +571,13 @@ export default function TravelPlanSamplePage() {
           mapRef.current?.fitBounds(bounds, 80);
           setShowRoute(true);
         } else {
-          setRoute(null);
-          setShowRoute(false);
+          setRoute(null); setShowRoute(false);
         }
       }
     );
   };
 
-  // ★ 패널 열기: 동적 backendId 반영
+  // 패널 열기 + 혼잡도/주변관광 로딩 트리거
   const openPanel = async ({ name, placeId, position }) => {
     const backendId = BACKEND_IDS[name] || dynamicBackendIds[name] || null;
 
@@ -585,29 +602,42 @@ export default function TravelPlanSamplePage() {
 
     const photoUrl = detail?.photos?.[0]?.getUrl({ maxWidth: 1200, maxHeight: 900 });
 
-    setSelectedPlace({
+    const final = {
       name: detail?.name || name,
       position: pos,
       details: detail || null,
       photoUrl,
       placeId: detail?.place_id || placeId || idCacheRef.current.get(name) || null,
       backendId,
-    });
+    };
+    setSelectedPlace(final);
+
+    // [추가] 혼잡도/주변관광 사전 로딩
+    if (backendId) {
+      // 혼잡도
+      getCrowding(backendId).then(setCrowding);
+      // 주변 관광지 (5km 기본)
+      setLoadingSights(true);
+      getNearbyPlacesBE(backendId, 5.0).then((rows) => {
+        const norm = normalizeNearbySights(rows || [], final.position);
+        setNearbySights(norm);
+        setLoadingSights(false);
+      });
+    } else {
+      setCrowding(null);
+      setNearbySights([]);
+    }
   };
 
-  const onClickItineraryPlace = (p) => openPanel({ name: p.name, placeId: p.placeId });
-
-  // ★ 음식점 로딩: 백엔드 우선 → 구글 폴백
+  // 음식점 로딩: 백엔드 우선 → 구글 폴백 (변경 없음)
   useEffect(() => {
     if (!selectedPlace?.position) return;
-
     let cancelled = false;
     const seq = ++loadSeqRef.current;
 
     const loadFoods = async () => {
       setLoadingFoods(true);
 
-      // 1) 백엔드 우선
       if (selectedPlace.backendId) {
         const [cafes, restos] = await Promise.all([
           getNearbyCafesBE(selectedPlace.backendId, 2.0),
@@ -623,20 +653,17 @@ export default function TravelPlanSamplePage() {
         }
       }
 
-      // 2) 구글 폴백
       if (window.google?.maps?.places) {
         const foods = await fetchNearbyFoods(
           new window.google.maps.LatLng(selectedPlace.position.lat, selectedPlace.position.lng)
         );
         if (cancelled || loadSeqRef.current !== seq) return;
-
         const pos = selectedPlace.position;
         const withDist = foods.map((f) => ({
           ...f,
           _distM: f?.geometry?.location ? haversine(pos, toLatLng(f.geometry.location)) : Number.POSITIVE_INFINITY,
         }));
         withDist.sort((a, b) => a._distM - b._distM);
-
         setNearbyFoods(withDist);
         setFoodSource("google");
         setLoadingFoods(false);
@@ -654,8 +681,7 @@ export default function TravelPlanSamplePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlace, openNowOnly, priceLevels]);
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // 검색창
+  // 검색창 (변경 없음)
   const SearchBox = () => (
     <StandaloneSearchBox
       onLoad={(ref) => (searchBoxRef.current = ref)}
@@ -680,49 +706,20 @@ export default function TravelPlanSamplePage() {
     </StandaloneSearchBox>
   );
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // ▼ 설문 state로 진입 시: 일정 생성 API 호출 → 화면 상태 동기화
+  // ▼ 설문 state로 진입 시: 일정 생성 API 호출 (변경 없음)
   useEffect(() => {
     const navState = location.state;
     if (!navState) return;
 
     const {
-      departureCity,
-      otherCity,
-      travelDuration,
-      travelStartDate,
-      startingPoint,
-      surveyAttractions = [],
-      preferences = {},
-      userId,          // 선택: 서버 저장 시 사용
-      courseId,        // 선택: 편집 API 사용 시 필요
-      title,           // 선택: 저장 시 제목
+      departureCity, otherCity, travelDuration, travelStartDate,
+      startingPoint, surveyAttractions = [], preferences = {},
     } = navState || {};
 
     if (!travelDuration || !travelStartDate) return;
 
-    // 설문에서 넘어온 availablePlaces 매핑(프론트 검색 패널 등에서 사용하려면 별도 상태로 보관 가능)
-    // (요청 사항 반영: 좌표 lng→locX, lat→locY + address/rating 기본 포함)
-    const availablePlaces = surveyAttractions.map((a) => ({
-      id: a.id,
-      name: a.name,
-      description: a.description,
-      duration: a.duration,
-      locX: a.lng,
-      locY: a.lat,
-      address: a.address || "",
-      rating: typeof a.rating === "number" ? a.rating : null,
-    }));
-    // 필요 시 setState로 어디선가 쓰세요.
-    // setAvailablePlaces(availablePlaces)
-
     const requestPayload = {
-      departureCity,
-      otherCity,
-      travelDuration,
-      travelStartDate,
-      startingPoint,
-      preferences,
+      departureCity, otherCity, travelDuration, travelStartDate, startingPoint, preferences,
       surveyAttractions: surveyAttractions.map(a => a.name),
     };
 
@@ -731,7 +728,6 @@ export default function TravelPlanSamplePage() {
         const data = await generateItinerary(requestPayload);
         if (!data?.dailySchedule?.length) return;
 
-        // 1) 좌표/ID 동적 맵 구성
         const nextCoords = { ...spotCoordsRef.current };
         const nextBackendIds = { ...dynamicBackendIds };
 
@@ -741,19 +737,15 @@ export default function TravelPlanSamplePage() {
             if (Array.isArray(coords) && coords.length >= 2) {
               nextCoords[p.name] = { lat: coords[1], lng: coords[0] };
             }
-            if (p?._id) {
-              nextBackendIds[p.name] = p._id;
-            }
+            if (p?._id) nextBackendIds[p.name] = p._id;
           });
         });
 
         spotCoordsRef.current = nextCoords;
         setDynamicBackendIds(nextBackendIds);
 
-        // 2) 화면용 itineraryData로 변환
-        // 시간은 보기 좋게 10:00부터 2시간 간격으로 자동 분배
         const toTime = (i) => {
-          const base = 10 * 60; // 10:00
+          const base = 10 * 60;
           const mins = base + i * 120;
           const hh = String(Math.floor(mins / 60)).padStart(2, "0");
           const mm = String(mins % 60).padStart(2, "0");
@@ -762,13 +754,12 @@ export default function TravelPlanSamplePage() {
 
         const nextItin = data.dailySchedule.map((day) => {
           const places = (day.places || []).map((place, idx) => ({
-            id: place.id || place._id, // 요청사항 반영
+            id: place.id || place._id,
             name: place.name,
             placeId: null,
             time: toTime(idx),
             backendId: place._id || null,
             icon: <MuseumIcon />,
-            // ▼ 화면표시/패널 등에 쓸 수 있도록 백엔드 스키마 필드도 보관
             description: place.description,
             duration: place.estimated_duration,
             locX: place.location?.coordinates?.[0],
@@ -780,11 +771,7 @@ export default function TravelPlanSamplePage() {
           const d = new Date(day.date || travelStartDate);
           const dateStr = `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`;
 
-          return {
-            date: dateStr,
-            dayName: `Day ${day.day}`,
-            places,
-          };
+          return { date: dateStr, dayName: `Day ${day.day}`, places };
         });
 
         setItineraryData(nextItin);
@@ -799,16 +786,59 @@ export default function TravelPlanSamplePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // 코스 저장(서버) 예시 — 필요 시 버튼 연결
+  // ▼ 추천 페이지에서 넘어온 선택 관광지(state.spots)만으로도 일정 구성 (+하루 6개 제한 적용)
+  useEffect(() => {
+    const navState = location.state;
+    const picked = navState?.spots;
+    if (!picked || !Array.isArray(picked) || picked.length === 0) return;
+
+    (async () => {
+      try {
+        const center = activeDayMarkers[0]?.position || BUSAN_CENTER;
+
+        // 좌표/place_id 보강
+        const enriched = await enrichSpotsWithDetails(picked, center);
+
+        // 여행 일수 (없으면 1일)
+        const days = Number(navState?.travelDuration) > 0 ? Number(navState.travelDuration) : 1;
+
+        // 일수 분배 + 시간 할당 (하루 6개 제한)
+        const buckets = distributeIntoDays(enriched, days);
+        const baseDate = new Date(navState?.travelStartDate || Date.now());
+
+        const nextItin = buckets.map((list, di) => {
+          const date = new Date(baseDate);
+          date.setDate(baseDate.getDate() + di);
+          const dateStr = `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`;
+
+          return {
+            date: dateStr,
+            dayName: `Day ${di + 1}`,
+            places: list.map((p, i) => ({
+              ...p,
+              time: timeForIndex(i),
+              icon: <MuseumIcon />,
+            })),
+          };
+        });
+
+        setItineraryData(nextItin);
+        setActiveDay(0);
+        setExpandedDays(new Set([0]));
+        setShowRoute(false);
+        setRoute(null);
+      } catch (e) {
+        console.error("선택 관광지로 일정 구성 실패:", e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
+  // 코스 저장(서버) 예시 (변경 없음)
   const handleSaveCourseToServer = async () => {
     try {
       const navState = location.state || {};
-      const payload = {
-        user_id: navState.userId || "demo-user",
-        title: navState.title || "부산 여행",
-        dailySchedule: itineraryData,
-      };
+      const payload = { user_id: navState.userId || "demo-user", title: navState.title || "부산 여행", dailySchedule: itineraryData };
       const res = await saveCourse(payload);
       alert("서버 저장 성공! course_id: " + res.course_id);
     } catch (e) {
@@ -817,13 +847,11 @@ export default function TravelPlanSamplePage() {
     }
   };
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // 일정 편집 — 장소 추가/삭제/순서변경 (옵티미스틱 + 서버 반영)
+  // 일정 편집 — 장소 추가/삭제/순서변경 (변경 없음)
   const addPlaceToDay = async (dayIndex, place) => {
-    // place: { id, name, description, duration, locX, locY, address, rating }
     const dayId = dayIndex + 1;
     setItineraryData((prev) =>
-      prev.map((d, i) => i === dayIndex ? { ...d, places: [...d.places, place] } : d)
+      prev.map((d, i) => (i === dayIndex ? { ...d, places: [...d.places, place] } : d))
     );
     try {
       const navState = location.state || {};
@@ -844,9 +872,10 @@ export default function TravelPlanSamplePage() {
       }
     } catch (e) {
       console.error(e);
-      // 롤백
       setItineraryData((prev) =>
-        prev.map((d, i) => i === dayIndex ? { ...d, places: d.places.filter((p) => p.id !== place.id) } : d)
+        prev.map((d, i) =>
+          i === dayIndex ? { ...d, places: d.places.filter((p) => p.id !== place.id) } : d
+        )
       );
       alert("장소 추가에 실패했습니다.");
     }
@@ -863,15 +892,11 @@ export default function TravelPlanSamplePage() {
     try {
       const navState = location.state || {};
       if (navState.courseId) {
-        await removePlaceFromCourse({
-          course_id: navState.courseId,
-          day: dayId,
-          place_id: placeId,
-        });
+        await removePlaceFromCourse({ course_id: navState.courseId, day: dayId, place_id: placeId });
       }
     } catch (e) {
       console.error(e);
-      setItineraryData(prev); // 롤백
+      setItineraryData(prev);
       alert("장소 제거에 실패했습니다.");
     }
   };
@@ -879,7 +904,6 @@ export default function TravelPlanSamplePage() {
   const onReorderPlace = async (dayIndex, sourceIndex, destIndex) => {
     if (destIndex < 0) return;
     let movedItem = null;
-
     setItineraryData((prev) =>
       prev.map((d, i) => {
         if (i !== dayIndex) return d;
@@ -889,7 +913,6 @@ export default function TravelPlanSamplePage() {
         return { ...d, places: arr };
       })
     );
-
     try {
       const navState = location.state || {};
       if (navState.courseId && movedItem?.id != null) {
@@ -897,13 +920,10 @@ export default function TravelPlanSamplePage() {
           course_id: navState.courseId,
           day: dayIndex + 1,
           place_id: movedItem.id,
-          updates: { order: destIndex }, // 서버 정렬 필드명에 맞춰 조정
+          updates: { order: destIndex },
         });
       }
-    } catch (e) {
-      console.error(e);
-      // 필요 시 롤백 로직 추가 가능
-    }
+    } catch (e) { console.error(e); }
   };
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -942,6 +962,7 @@ export default function TravelPlanSamplePage() {
                     <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2, ...noWrapSx }}>
                       {selectedPlace.name}
                     </Typography>
+
                     {typeof selectedPlace?.details?.rating === "number" ? (
                       <Box sx={{ display: "flex", alignItems: "center", gap: .5 }}>
                         <Rating size="small" value={Number(selectedPlace.details.rating)} precision={0.1} readOnly />
@@ -950,9 +971,26 @@ export default function TravelPlanSamplePage() {
                         </Typography>
                       </Box>
                     ) : null}
+
                     <Typography variant="body2" sx={{ color: "text.secondary", mt: .5, ...noWrapSx }}>
                       {selectedPlace?.details?.formatted_address || "주소 정보 없음"}
                     </Typography>
+
+                    {/* [추가] 혼잡도 표시(간단 Chip) */}
+                    {crowding && (
+                      <Box sx={{ mt: 0.75, display: "flex", alignItems: "center", gap: .5, flexWrap: "wrap" }}>
+                        <Chip
+                          size="small"
+                          color="warning"
+                          label={`혼잡도: ${crowding.level ?? "정보없음"}`}
+                        />
+                        {crowding.updated_at && (
+                          <Typography variant="caption" color="text.secondary">
+                            업데이트: {new Date(crowding.updated_at).toLocaleString()}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
                   </Box>
                   <IconButton onClick={() => setSelectedPlace(null)} size="small" aria-label="닫기">
                     <CloseIcon />
@@ -987,12 +1025,15 @@ export default function TravelPlanSamplePage() {
 
               <Divider />
 
+              {/* [수정] 탭 3개: 개요/음식점/주변관광 */}
               <Tabs value={panelTab} onChange={(_, v) => setPanelTab(v)} variant="fullWidth">
                 <Tab label="개요" />
                 <Tab label="음식점" />
+                <Tab label="주변관광" />
               </Tabs>
 
               <Box sx={{ flex: 1, overflowY: "auto" }}>
+                {/* 개요 */}
                 {panelTab === 0 && (
                   <Box sx={{ p: 2 }}>
                     <Typography variant="subtitle2" sx={{ mb: 1, ...noWrapSx }}>소개</Typography>
@@ -1010,9 +1051,9 @@ export default function TravelPlanSamplePage() {
                   </Box>
                 )}
 
+                {/* 음식점 */}
                 {panelTab === 1 && (
                   <Box sx={{ p: 2 }}>
-                    {/* 출처 배지 */}
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
                       <Chip
                         size="small"
@@ -1022,28 +1063,14 @@ export default function TravelPlanSamplePage() {
                       />
                     </Box>
 
-                    {/* 필터 (구글일 때만 영향) */}
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5, flexWrap: "wrap" }}>
                       <FormControlLabel
-                        control={
-                          <Switch
-                            size="small"
-                            checked={openNowOnly}
-                            onChange={(e) => setOpenNowOnly(e.target.checked)}
-                          />
-                        }
+                        control={<Switch size="small" checked={openNowOnly} onChange={(e) => setOpenNowOnly(e.target.checked)} />}
                         label="지금 영업중"
                       />
-                      <ToggleButtonGroup
-                        value={priceLevels}
-                        onChange={(_, val) => val?.length && setPriceLevels(val)}
-                        aria-label="가격대"
-                        size="small"
-                      >
+                      <ToggleButtonGroup value={priceLevels} onChange={(_, val) => val?.length && setPriceLevels(val)} aria-label="가격대" size="small">
                         {[0,1,2,3,4].map((lvl) => (
-                          <ToggleButton key={lvl} value={lvl} aria-label={`₩${"₩".repeat(lvl)}`}>
-                            ₩{"₩".repeat(lvl)}
-                          </ToggleButton>
+                          <ToggleButton key={lvl} value={lvl} aria-label={`₩${"₩".repeat(lvl)}`}>₩{"₩".repeat(lvl)}</ToggleButton>
                         ))}
                       </ToggleButtonGroup>
                     </Box>
@@ -1068,9 +1095,7 @@ export default function TravelPlanSamplePage() {
                                 </Typography>
                               </Box>
                             )}
-                            <Typography variant="caption" sx={{ color: "text.secondary", ...noWrapSx }}>
-                              {r.vicinity}
-                            </Typography>
+                            <Typography variant="caption" sx={{ color: "text.secondary", ...noWrapSx }}>{r.vicinity}</Typography>
                             {typeof r._distM === "number" && isFinite(r._distM) && (
                               <Typography variant="caption" sx={{ display: "block", mt: .25, color: "text.secondary" }}>
                                 약 {(r._distM / 1000).toFixed(2)} km
@@ -1078,10 +1103,149 @@ export default function TravelPlanSamplePage() {
                             )}
                           </Box>
                         ))}
-
-                        {/* 무한 스크롤 센티넬 */}
                         <Box ref={sentinelRef} sx={{ height: 1 }} />
                       </>
+                    )}
+                  </Box>
+                )}
+
+                                {/* [추가] 주변 관광지 탭 */}
+                {panelTab === 2 && (
+                  <Box sx={{ p: 2 }}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        mb: 1,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Chip size="small" variant="outlined" label="반경 5km 기준" />
+                      {selectedPlace?.backendId ? (
+                        <Chip size="small" color="success" label="출처: Backend" />
+                      ) : (
+                        <Chip size="small" color="warning" label="백엔드 장소ID 없음" />
+                      )}
+                    </Box>
+
+                    {loadingSights ? (
+                      <Box sx={{ py: 6, textAlign: "center" }}>
+                        <CircularProgress size={24} />
+                        <Typography variant="caption" sx={{ display: "block", mt: 1 }}>
+                          주변 관광지 불러오는 중…
+                        </Typography>
+                      </Box>
+                    ) : nearbySights.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        조건에 맞는 주변 관광지를 찾지 못했습니다.
+                      </Typography>
+                    ) : (
+                      <Stack spacing={1.2}>
+                        {nearbySights.map((s) => {
+                          const lat =
+                            typeof s.geometry?.location?.lat === "function"
+                              ? s.geometry.location.lat()
+                              : undefined;
+                          const lng =
+                            typeof s.geometry?.location?.lng === "function"
+                              ? s.geometry.location.lng()
+                              : undefined;
+                          const pos =
+                            lat != null && lng != null ? { lat, lng } : undefined;
+
+                          return (
+                            <Paper
+                              key={s.place_id || s._id || s.name}
+                              sx={{ p: 1.25, border: "1px solid #eee" }}
+                            >
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 1,
+                                }}
+                              >
+                                <Avatar
+                                  sx={{
+                                    width: 28,
+                                    height: 28,
+                                    fontSize: 12,
+                                    bgcolor: "#1976d2",
+                                    color: "white",
+                                  }}
+                                >
+                                  <MuseumIcon sx={{ fontSize: 16 }} />
+                                </Avatar>
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                  <Typography
+                                    variant="subtitle2"
+                                    sx={{ fontWeight: 700, ...noWrapSx }}
+                                  >
+                                    {s.name}
+                                  </Typography>
+
+                                  {typeof s.rating === "number" && (
+                                    <Box
+                                      sx={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 0.5,
+                                      }}
+                                    >
+                                      <Rating
+                                        size="small"
+                                        value={Number(s.rating)}
+                                        precision={0.1}
+                                        readOnly
+                                      />
+                                      <Typography variant="caption" sx={noWrapSx}>
+                                        {s.rating} (
+                                        {s.user_ratings_total?.toLocaleString?.() || 0})
+                                      </Typography>
+                                    </Box>
+                                  )}
+
+                                  <Typography
+                                    variant="caption"
+                                    sx={{ color: "text.secondary", ...noWrapSx }}
+                                  >
+                                    {s.vicinity}
+                                  </Typography>
+
+                                  {typeof s._distM === "number" &&
+                                    isFinite(s._distM) && (
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          display: "block",
+                                          mt: 0.25,
+                                          color: "text.secondary",
+                                        }}
+                                      >
+                                        약 {(s._distM / 1000).toFixed(2)} km
+                                      </Typography>
+                                    )}
+                                </Box>
+
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => {
+                                    openPanel({
+                                      name: s.name,
+                                      placeId: s.place_id || null,
+                                      position: pos,
+                                    });
+                                  }}
+                                >
+                                  자세히
+                                </Button>
+                              </Box>
+                            </Paper>
+                          );
+                        })}
+                      </Stack>
                     )}
                   </Box>
                 )}
@@ -1093,7 +1257,15 @@ export default function TravelPlanSamplePage() {
         {/* 가운데: 지도 */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <StyledPaper sx={{ mb: 3 }}>
-            <Box sx={{ mb: 2, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "center" }}>
+            <Box
+              sx={{
+                mb: 2,
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto",
+                gap: 8,
+                alignItems: "center",
+              }}
+            >
               <Box>
                 <Typography variant="h5" sx={{ fontWeight: 800, mb: 1, ...noWrapSx }}>
                   부산 여행 지도
@@ -1107,7 +1279,9 @@ export default function TravelPlanSamplePage() {
                   variant={showRoute ? "contained" : "outlined"}
                   size="small"
                   startIcon={<RouteIcon />}
-                  onClick={() => (showRoute ? (setShowRoute(false), setRoute(null)) : buildRouteFromActiveDay())}
+                  onClick={() =>
+                    showRoute ? (setShowRoute(false), setRoute(null)) : buildRouteFromActiveDay()
+                  }
                 >
                   동선 보기
                 </Button>
@@ -1126,28 +1300,36 @@ export default function TravelPlanSamplePage() {
 
             {/* 검색창 */}
             <Box sx={{ mb: 2 }}>
-              {isLoaded ? <SearchBox /> : (
+              {isLoaded ? (
+                <SearchBox />
+              ) : (
                 <TextField fullWidth size="small" placeholder="장소 검색 준비 중…" disabled />
               )}
             </Box>
 
-            <Chip label={`${itineraryData.length}일 ${Math.max(itineraryData.length - 1, 0)}박`} size="small"
-                  sx={{ bgcolor: "#e3f2fd", color: "#1976d2", mb: 2, ...noWrapSx }} />
+            <Chip
+              label={`${itineraryData.length}일 ${Math.max(itineraryData.length - 1, 0)}박`}
+              size="small"
+              sx={{ bgcolor: "#e3f2fd", color: "#1976d2", mb: 2, ...noWrapSx }}
+            />
 
             <MapShell>
               {loadError && (
-                <Box sx={{ p: 2, color: "error.main" }}>지도를 불러오는 중 오류가 발생했습니다. API 키/권한을 확인하세요.</Box>
+                <Box sx={{ p: 2, color: "error.main" }}>
+                  지도를 불러오는 중 오류가 발생했습니다. API 키/권한을 확인하세요.
+                </Box>
               )}
-              {!isLoaded && !loadError && (
-                <Box sx={{ p: 2 }}>지도를 불러오는 중…</Box>
-              )}
+              {!isLoaded && !loadError && <Box sx={{ p: 2 }}>지도를 불러오는 중…</Box>}
               {isLoaded && (
                 <GoogleMap
-                  center={(selectedPlace?.position) || mapCenter}
+                  center={selectedPlace?.position || mapCenter}
                   zoom={selectedPlace ? 14 : 12}
                   mapContainerStyle={{ width: "100%", height: "100%" }}
                   options={mapOptions}
-                  onLoad={(map) => { mapRef.current = map; ensurePlacesService(); }}
+                  onLoad={(map) => {
+                    mapRef.current = map;
+                    ensurePlacesService();
+                  }}
                 >
                   <MarkerClustererF>
                     {(clusterer) => (
@@ -1159,7 +1341,9 @@ export default function TravelPlanSamplePage() {
                             label={`${m.order}`}
                             title={m.title}
                             clusterer={clusterer}
-                            onClick={() => openPanel({ name: m.title, placeId: m.placeId, position: m.position })}
+                            onClick={() =>
+                              openPanel({ name: m.title, placeId: m.placeId, position: m.position })
+                            }
                           />
                         ))}
                         {quickSpotMarkers.map((m) => (
@@ -1168,7 +1352,9 @@ export default function TravelPlanSamplePage() {
                             position={m.position}
                             title={m.title}
                             clusterer={clusterer}
-                            onClick={() => openPanel({ name: m.title, placeId: m.placeId, position: m.position })}
+                            onClick={() =>
+                              openPanel({ name: m.title, placeId: m.placeId, position: m.position })
+                            }
                           />
                         ))}
                       </>
@@ -1188,17 +1374,41 @@ export default function TravelPlanSamplePage() {
 
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
-              <Paper sx={{ cursor: "pointer", transition: "all .2s", "&:hover": { transform: "translateY(-2px)", boxShadow: 4 }, p: 3, textAlign: "center" }}>
+              <Paper
+                sx={{
+                  cursor: "pointer",
+                  transition: "all .2s",
+                  "&:hover": { transform: "translateY(-2px)", boxShadow: 4 },
+                  p: 3,
+                  textAlign: "center",
+                }}
+              >
                 <FlightTakeoffIcon sx={{ fontSize: 44, mb: 1.5, color: "#666" }} />
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, ...noWrapSx }}>갈 곳을</Typography>
-                <Typography variant="body2" color="text.secondary" sx={noWrapSx}>직접 검색 입력</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, ...noWrapSx }}>
+                  갈 곳을
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={noWrapSx}>
+                  직접 검색 입력
+                </Typography>
               </Paper>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Paper sx={{ cursor: "pointer", transition: "all .2s", "&:hover": { transform: "translateY(-2px)", boxShadow: 4 }, p: 3, textAlign: "center" }}>
+              <Paper
+                sx={{
+                  cursor: "pointer",
+                  transition: "all .2s",
+                  "&:hover": { transform: "translateY(-2px)", boxShadow: 4 },
+                  p: 3,
+                  textAlign: "center",
+                }}
+              >
                 <RestaurantIcon sx={{ fontSize: 44, mb: 1.5, color: "#666" }} />
-                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, ...noWrapSx }}>음식스팟</Typography>
-                <Typography variant="body2" color="text.secondary" sx={noWrapSx}>인기 많은 장소</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, ...noWrapSx }}>
+                  음식스팟
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={noWrapSx}>
+                  인기 많은 장소
+                </Typography>
               </Paper>
             </Grid>
           </Grid>
@@ -1217,7 +1427,9 @@ export default function TravelPlanSamplePage() {
           }}
         >
           <Box sx={{ p: 3, borderBottom: "1px solid #e0e0e0" }}>
-            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2, ...noWrapSx }}>부산 여행 일정</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2, ...noWrapSx }}>
+              부산 여행 일정
+            </Typography>
             <TextField
               fullWidth
               placeholder="검색어 입력하세요"
@@ -1229,29 +1441,50 @@ export default function TravelPlanSamplePage() {
             />
             <Grid container spacing={1.5}>
               {[
-                { name: "해운대 해수욕장", location: "부산광역시 해운대구", icon: <BeachAccessIcon/>, color: "#FF6B6B" },
-                { name: "광안리 해변", location: "부산 해수욕장 중 하나", icon: <BeachAccessIcon/>, color: "#FF6B6B" },
-                { name: "감천문화마을", location: "한국의 마추픽추", icon: <MuseumIcon/>, color: "#FF6B6B" },
-                { name: "자갈치 시장", location: "신선한 수산물", icon: <RestaurantIcon/>, color: "#FF6B6B" },
+                { name: "해운대 해수욕장", location: "부산광역시 해운대구", icon: <BeachAccessIcon />, color: "#FF6B6B" },
+                { name: "광안리 해변", location: "부산 해수욕장 중 하나", icon: <BeachAccessIcon />, color: "#FF6B6B" },
+                { name: "감천문화마을", location: "한국의 마추픽추", icon: <MuseumIcon />, color: "#FF6B6B" },
+                { name: "자갈치 시장", location: "신선한 수산물", icon: <RestaurantIcon />, color: "#FF6B6B" },
               ].map((spot, idx) => (
                 <Grid item xs={6} key={idx}>
                   <Paper
-                    onClick={() => openPanel({ name: spot.name, placeId: null, position: spotCoordsRef.current[spot.name] })}
+                    onClick={() =>
+                      openPanel({
+                        name: spot.name,
+                        placeId: null,
+                        position: spotCoordsRef.current[spot.name],
+                      })
+                    }
                     sx={{
                       cursor: "pointer",
-                      bgcolor: spot.color, color: "white",
+                      bgcolor: spot.color,
+                      color: "white",
                       transition: "all .2s",
                       "&:hover": { transform: "translateY(-1px)" },
-                      p: 1.8, borderRadius: 2
+                      p: 1.8,
+                      borderRadius: 2,
                     }}
                   >
                     <Box sx={{ display: "flex", alignItems: "center", mb: 0.8 }}>
                       {spot.icon}
                       <Box sx={{ ml: 1, flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700, ...noWrapSx }}>{spot.name}</Typography>
-                        <Typography variant="caption" sx={{ opacity: 0.9, ...noWrapSx }}>{spot.location}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700, ...noWrapSx }}>
+                          {spot.name}
+                        </Typography>
+                        <Typography variant="caption" sx={{ opacity: 0.9, ...noWrapSx }}>
+                          {spot.location}
+                        </Typography>
                       </Box>
-                      <Chip label="상세" size="small" sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "white", height: 22, fontSize: ".7rem" }} />
+                      <Chip
+                        label="상세"
+                        size="small"
+                        sx={{
+                          bgcolor: "rgba(255,255,255,0.2)",
+                          color: "white",
+                          height: 22,
+                          fontSize: ".7rem",
+                        }}
+                      />
                     </Box>
                   </Paper>
                 </Grid>
@@ -1261,8 +1494,14 @@ export default function TravelPlanSamplePage() {
 
           <Box sx={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
             <Box sx={{ p: 3, pb: 1 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1, ...noWrapSx }}>여행 일정표</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: "block", ...noWrapSx }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1, ...noWrapSx }}>
+                여행 일정표
+              </Typography>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mb: 2, display: "block", ...noWrapSx }}
+              >
                 목록에서 장소를 누르면 왼쪽 패널에 상세가 열립니다.
               </Typography>
             </Box>
@@ -1275,7 +1514,10 @@ export default function TravelPlanSamplePage() {
                       <Box sx={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
                         <Avatar
                           sx={{
-                            width: 28, height: 28, fontSize: 13, mr: 1.5,
+                            width: 28,
+                            height: 28,
+                            fontSize: 13,
+                            mr: 1.5,
                             bgcolor: activeDay === index ? "white" : "#2196f3",
                             color: activeDay === index ? "#2196f3" : "white",
                           }}
@@ -1283,15 +1525,28 @@ export default function TravelPlanSamplePage() {
                           {index + 1}
                         </Avatar>
                         <Box sx={{ minWidth: 0 }}>
-                          <Typography variant="body1" sx={{ fontWeight: 700, ...noWrapSx }}>{day.dayName}</Typography>
-                          <Typography variant="caption" sx={{ opacity: 0.75, ...noWrapSx }}>{day.date}</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 700, ...noWrapSx }}>
+                            {day.dayName}
+                          </Typography>
+                          <Typography variant="caption" sx={{ opacity: 0.75, ...noWrapSx }}>
+                            {day.date}
+                          </Typography>
                         </Box>
                       </Box>
                       <Box sx={{ display: "flex", alignItems: "center" }}>
                         <Badge badgeContent={day.places.length} color="primary" sx={{ mr: 1 }} />
-                        <IconButton size="small" onClick={(e) => (e.stopPropagation(), setExpandedDays(p => {
-                          const n = new Set(p); n.has(index) ? n.delete(index) : n.add(index); return n;
-                        }))} sx={{ color: "inherit" }}>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => (
+                            e.stopPropagation(),
+                            setExpandedDays((p) => {
+                              const n = new Set(p);
+                              n.has(index) ? n.delete(index) : n.add(index);
+                              return n;
+                            })
+                          )}
+                          sx={{ color: "inherit" }}
+                        >
                           {expandedDays.has(index) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                         </IconButton>
                       </Box>
@@ -1302,19 +1557,54 @@ export default function TravelPlanSamplePage() {
                         {day.places.map((place, placeIndex) => (
                           <Box
                             key={place.id}
-                            onClick={() => openPanel({ name: place.name, placeId: place.placeId, position: spotCoordsRef.current[place.name] })}
+                            onClick={() =>
+                              openPanel({
+                                name: place.name,
+                                placeId: place.placeId,
+                                position: spotCoordsRef.current[place.name],
+                              })
+                            }
                             sx={{
-                              display: "flex", alignItems: "center", py: 0.9, px: 1.2, cursor: "pointer",
-                              bgcolor: activeDay === index ? "rgba(33, 150, 243, 0.06)" : "transparent",
-                              borderRadius: 1.2, mb: 0.6, "&:hover": { bgcolor: "rgba(33,150,243,.09)" }
+                              display: "flex",
+                              alignItems: "center",
+                              py: 0.9,
+                              px: 1.2,
+                              cursor: "pointer",
+                              bgcolor:
+                                activeDay === index ? "rgba(33, 150, 243, 0.06)" : "transparent",
+                              borderRadius: 1.2,
+                              mb: 0.6,
+                              "&:hover": { bgcolor: "rgba(33,150,243,.09)" },
                             }}
                           >
-                            <Avatar sx={{ width: 20, height: 20, fontSize: 11, bgcolor: "#2196f3", mr: 1.1 }}>{placeIndex + 1}</Avatar>
+                            <Avatar
+                              sx={{
+                                width: 20,
+                                height: 20,
+                                fontSize: 11,
+                                bgcolor: "#2196f3",
+                                mr: 1.1,
+                              }}
+                            >
+                              {placeIndex + 1}
+                            </Avatar>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography variant="body2" sx={{ fontWeight: 600, ...noWrapSx }}>{place.name}</Typography>
-                              <Typography variant="caption" color="text.secondary" sx={{ display: "block", ...noWrapSx }}>{place.time}</Typography>
+                              <Typography variant="body2" sx={{ fontWeight: 600, ...noWrapSx }}>
+                                {place.name}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ display: "block", ...noWrapSx }}
+                              >
+                                {place.time}
+                              </Typography>
                               {place.address && (
-                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", ...noWrapSx }}>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ display: "block", ...noWrapSx }}
+                                >
                                   {place.address}
                                 </Typography>
                               )}
@@ -1334,10 +1624,25 @@ export default function TravelPlanSamplePage() {
                             >
                               삭제
                             </Button>
-                            {/* (선택) 위/아래 이동 — 서버 정렬 업데이트와 연동 */}
-                            <Box sx={{ ml: 1, display: "flex", gap: .5 }}>
-                              <Button size="small" onClick={(e) => { e.stopPropagation(); onReorderPlace(index, placeIndex, placeIndex - 1); }}>↑</Button>
-                              <Button size="small" onClick={(e) => { e.stopPropagation(); onReorderPlace(index, placeIndex, placeIndex + 1); }}>↓</Button>
+                            <Box sx={{ ml: 1, display: "flex", gap: 0.5 }}>
+                              <Button
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onReorderPlace(index, placeIndex, placeIndex - 1);
+                                }}
+                              >
+                                ↑
+                              </Button>
+                              <Button
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onReorderPlace(index, placeIndex, placeIndex + 1);
+                                }}
+                              >
+                                ↓
+                              </Button>
                             </Box>
                           </Box>
                         ))}
@@ -1358,7 +1663,11 @@ export default function TravelPlanSamplePage() {
                     borderColor: "#ddd",
                     color: "#666",
                     ...noWrapSx,
-                    "&:hover": { borderColor: "#2196f3", color: "#2196f3", bgcolor: "rgba(33,150,243,.05)" }
+                    "&:hover": {
+                      borderColor: "#2196f3",
+                      color: "#2196f3",
+                      bgcolor: "rgba(33,150,243,.05)",
+                    },
                   }}
                   onClick={() => {
                     const name = window.prompt("추가할 장소 이름?");
@@ -1422,13 +1731,12 @@ export default function TravelPlanSamplePage() {
               <Button
                 variant="contained"
                 startIcon={<SaveIcon />}
-                onClick={handleSavePlan} // 로컬 저장
+                onClick={handleSavePlan}
                 sx={{ bgcolor: "#FF6B6B", ...noWrapSx }}
                 size="small"
               >
                 저장(로컬)
               </Button>
-              {/* 필요 시 서버 저장 버튼 추가 */}
               {/* <Button variant="contained" color="primary" onClick={handleSaveCourseToServer} size="small">서버 저장</Button> */}
             </Stack>
           </Box>
@@ -1440,22 +1748,31 @@ export default function TravelPlanSamplePage() {
         <DialogTitle>저장된 코스 불러오기</DialogTitle>
         <DialogContent dividers>
           {plans.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">아직 저장된 코스가 없습니다.</Typography>
+            <Typography variant="body2" color="text.secondary">
+              아직 저장된 코스가 없습니다.
+            </Typography>
           ) : (
             <Stack spacing={1.2}>
               {plans.map((p) => (
-                <Paper key={p.id} sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
+                <Paper
+                  key={p.id}
+                  sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}
+                >
                   <Avatar variant="rounded" src={p.cover || undefined} sx={{ width: 56, height: 40 }}>
                     <RouteIcon fontSize="small" />
                   </Avatar>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="subtitle2" sx={noWrapSx}>{p.title}</Typography>
+                    <Typography variant="subtitle2" sx={noWrapSx}>
+                      {p.title}
+                    </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {new Date(p.createdAt).toLocaleString()}
                     </Typography>
                   </Box>
                   <Stack direction="row" spacing={1}>
-                    <Button size="small" variant="outlined" onClick={() => handleLoadPlan(p.id)}>불러오기</Button>
+                    <Button size="small" variant="outlined" onClick={() => handleLoadPlan(p.id)}>
+                      불러오기
+                    </Button>
                     <IconButton size="small" color="error" onClick={() => handleDeletePlan(p.id)}>
                       <DeleteOutlineIcon />
                     </IconButton>
