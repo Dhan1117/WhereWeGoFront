@@ -27,7 +27,7 @@ import './Header.scss';
 import { SearchContext } from '../SearchContext';
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_PREFIX || 'http://localhost:8000';
+const API_BASE = process.env.REACT_APP_API_PREFIX
 
 const Header = ({ onSelectCategory = () => {} }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
