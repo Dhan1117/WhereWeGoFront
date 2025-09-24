@@ -7,6 +7,7 @@ import SearchResultPage from './pages/SearchResultPage';
 import Header from './components/Header'; // 실제 Header 컴포넌트 경로로 수정 필요
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import './App.scss';
+import { Toolbar } from '@mui/material';
 import { categoriesData } from './data/categoriesData'; // 실제 categoriesData 경로로 수정 필요
 import WishlistPage from './pages/WishlistPage';
 import { SearchProvider } from './SearchContext'; // 실제 SearchContext 경로로 수정 필요
@@ -59,6 +60,7 @@ function App() {
           <ItineraryProvider> {/* ✅ 추가: 전역 일정 컨텍스트 */}
             <BrowserRouter>
               <Header onSelectCategory={setSelectedCategoryForHeader} currentCategory={selectedCategoryForHeader} />
+              <Toolbar sx={{ height: { xs: 64, sm: 80, md: 100 } }} />
               <Routes>
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/survey" element={<SurveyPage />} />

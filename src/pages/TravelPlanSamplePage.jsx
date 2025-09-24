@@ -132,7 +132,11 @@ const haversine = (a, b) => {
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 백엔드 연동 유틸
-const API_BASE = "http://localhost:8000/api/v1";
+const API_PREFIX =
+  process.env.REACT_APP_API_PREFIX ||
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_PREFIX) ||
+  "http://localhost:8000";
+const API_BASE = `${API_PREFIX.replace(/\/$/, "")}/api/v1`;
 
 // 일정 생성 (변경 없음)
 async function generateItinerary(requestData) {
@@ -150,10 +154,10 @@ async function generateItinerary(requestData) {
   }
 }
 
-// 안전 JSON fetch (변경 없음)
+// 안전 JSON fetch (credentials 포함)
 async function safeFetchJson(url) {
   try {
-    const r = await fetch(url, { mode: "cors" });
+    const r = await fetch(url, { mode: "cors", credentials: "include" });
     if (!r.ok) return null;
     return await r.json();
   } catch {
@@ -161,7 +165,7 @@ async function safeFetchJson(url) {
   }
 }
 
-// 주변 카페/식당(백엔드) (변경 없음)
+// 주변 카페/식당(백엔드)
 async function getNearbyCafesBE(placeId, maxDistance = 2.0) {
   return (await safeFetchJson(`${API_BASE}/nearby/cafes/${placeId}?max_distance=${maxDistance}`)) || [];
 }
@@ -169,27 +173,26 @@ async function getNearbyRestaurantsBE(placeId, maxDistance = 1.5) {
   return (await safeFetchJson(`${API_BASE}/nearby/restaurants/${placeId}?max_distance=${maxDistance}`)) || [];
 }
 
-// [추가] 주변 관광지(백엔드)
+// 주변 관광지(백엔드)
 async function getNearbyPlacesBE(placeId, maxDistance = 5.0, includeCrowding = false) {
-  const url = `${API_BASE}/nearby/${placeId}?max_distance=${maxDistance}` + (includeCrowding ? `&include_crowding=true` : "");
+  const url = `${API_BASE}/nearby/${placeId}?max_distance=${maxDistance}` +
+              (includeCrowding ? `&include_crowding=true` : "");
   return (await safeFetchJson(url)) || [];
 }
 
-// [추가] 혼잡도 조회
+// 혼잡도 조회
 async function getCrowding(placeId) {
   return await safeFetchJson(`${API_BASE}/place/crowding/${placeId}`);
 }
 
-// 백엔드 응답 → 화면용 포맷 (음식/카페 공통) (변경 없음)
+// 백엔드 응답 → 화면용 포맷 (음식/카페 공통)
 function normalizeBackendPlaces(rows = [], center) {
   const out = [];
   for (const r of rows) {
     const coords = r?.location?.coordinates; // [lng, lat]
     if (!coords || coords.length < 2) continue;
     const pos = { lat: coords[1], lng: coords[0] };
-
     const distM = haversine(center, pos);
-
     out.push({
       place_id: r._id,
       name: r.name,
@@ -204,13 +207,50 @@ function normalizeBackendPlaces(rows = [], center) {
   return out;
 }
 
-// [추가] 관광지 목록 포맷
+// Google Places 결과 → 동일 스키마로 정규화
+function normalizeGooglePlaces(rows = [], center) {
+  const out = [];
+  for (const r of rows) {
+    const gloc = r?.geometry?.location;
+    if (!gloc) continue;
+    const pos = toLatLng(gloc);
+    const distM = haversine(center, pos);
+    out.push({
+      place_id: r.place_id,
+      name: r.name,
+      rating: r.rating ?? null,
+      user_ratings_total: r.user_ratings_total ?? null,
+      vicinity: r.vicinity || r.formatted_address || "",
+      geometry: { location: { lat: () => pos.lat, lng: () => pos.lng } },
+      _distM: distM,
+    });
+  }
+  out.sort((a, b) => a._distM - b._distM);
+  return out;
+}
+
+// 관광지 목록 포맷
 function normalizeNearbySights(rows = [], center) {
   return normalizeBackendPlaces(rows, center).map(r => ({
     ...r,
-    // 관광지는 별도 태그만 다르게 쓸 수도 있음
     isSight: true,
   }));
+}
+
+// Google Places: 주변 관광지(폴백)
+async function getNearbySightsGoogle(placesService, centerLatLng, radiusKm = 5.0) {
+  if (!placesService || !centerLatLng) return [];
+  const request = {
+    location: centerLatLng,
+    radius: Math.max(500, Math.floor(radiusKm * 1000)),
+    type: "tourist_attraction",
+    language: "ko",
+  };
+  return await new Promise((resolve) => {
+    placesService.nearbySearch(request, (results) => {
+      resolve(results || []);
+    });
+  });
 }
 
 // ── 코스 API 래퍼 (변경 없음)
@@ -267,19 +307,19 @@ export default function TravelPlanSamplePage() {
     ]},
   ]);
 
-  // [추가] 주변 관광지/혼잡도 상태
+  // 주변 관광지/혼잡도 상태
   const [nearbySights, setNearbySights] = useState([]);     // 주변 관광지 리스트
   const [loadingSights, setLoadingSights] = useState(false);
   const [crowding, setCrowding] = useState(null);           // { level, updated_at, ... } 가정
 
-  // 선택 장소/주변 음식점 (변경 없음)
+  // 선택 장소/주변 음식점
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [nearbyFoods, setNearbyFoods] = useState([]);
   const [loadingFoods, setLoadingFoods] = useState(false);
   const [foodSource, setFoodSource] = useState("google");
   const loadSeqRef = useRef(0);
 
-  // 음식점 탭: 무한 스크롤 (변경 없음)
+  // 음식점 탭: 무한 스크롤
   const [displayCount, setDisplayCount] = useState(5);
   const sentinelRef = useRef(null);
   useEffect(() => { setDisplayCount(5); }, [nearbyFoods, panelTab, selectedPlace?.backendId, foodSource]);
@@ -296,25 +336,25 @@ export default function TravelPlanSamplePage() {
     return () => io.disconnect();
   }, [panelTab, nearbyFoods.length]);
 
-  // 필터 (변경 없음)
+  // 필터
   const [openNowOnly, setOpenNowOnly] = useState(false);
   const [priceLevels, setPriceLevels] = useState([0,1,2,3,4]);
 
-  // 경로 (변경 없음)
+  // 경로
   const [route, setRoute] = useState(null);
   const [showRoute, setShowRoute] = useState(false);
 
-  // Google 객체/서비스 (변경 없음)
+  // Google 객체/서비스
   const mapRef = useRef(null);
   const placesServiceRef = useRef(null);
   const searchBoxRef = useRef(null);
 
-  // 캐시 (변경 없음)
+  // 캐시
   const detailCacheRef = useRef(new Map());
   const idCacheRef = useRef(new Map());
   const inFlightRef = useRef(new Set());
 
-  // 동적 좌표/ID 저장 (변경 없음)
+  // 동적 좌표/ID 저장
   const [dynamicBackendIds, setDynamicBackendIds] = useState({});
   const spotCoordsRef = useRef({ ...SPOT_COORDS });
 
@@ -325,7 +365,7 @@ export default function TravelPlanSamplePage() {
     region: "KR",
   });
 
-  // planId로 불러오기 (변경 없음)
+  // planId로 불러오기
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const planId = params.get("planId");
@@ -342,7 +382,7 @@ export default function TravelPlanSamplePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 저장/불러오기 UI (변경 없음)
+  // 저장/불러오기 UI
   const [openLoadDlg, setOpenLoadDlg] = useState(false);
   const [plans, setPlans] = useState([]);
   const [snack, setSnack] = useState({ open: false, msg: "" });
@@ -372,7 +412,7 @@ export default function TravelPlanSamplePage() {
     refreshPlans();
   };
 
-  // (샘플) 빠른 스팟 카드 (변경 없음)
+  // (샘플) 빠른 스팟 카드
   const touristSpots = useMemo(() => ([
     { name: "해운대 해수욕장", location: "부산광역시 해운대구", icon: <BeachAccessIcon/>, color: "#FF6B6B" },
     { name: "광안리 해변", location: "부산 해수욕장 중 하나", icon: <BeachAccessIcon/>, color: "#FF6B6B" },
@@ -387,7 +427,7 @@ export default function TravelPlanSamplePage() {
     setRoute(null);
   };
 
-  // Places 서비스 (변경 없음)
+  // Places 서비스
   const ensurePlacesService = () => {
     if (!placesServiceRef.current && mapRef.current && window.google) {
       placesServiceRef.current = new window.google.maps.places.PlacesService(mapRef.current);
@@ -478,7 +518,7 @@ export default function TravelPlanSamplePage() {
         name: s.name,
         time: "",
         placeId: placeId || null,
-        backendId: null,
+        ackendId: s.backendId || s.id || null,
         address: s.address || detail?.formatted_address || "",
         rating: typeof s.rating === "number" ? s.rating : (detail?.rating ?? null),
       });
@@ -486,7 +526,7 @@ export default function TravelPlanSamplePage() {
     return out;
   }
 
-  // [수정] 하루 최대 6개로 분배
+  // 하루 최대 6개로 분배
   function distributeIntoDays(items, days) {
     if (!days || days < 1) days = 1;
     const MAX_PER_DAY = 6;
@@ -514,13 +554,20 @@ export default function TravelPlanSamplePage() {
     return `${hh}:${mm}`;
   }
 
-  // ★ 동적 좌표 참조(백엔드 우선) (변경 없음)
+  // ★ 동적 좌표 참조(백엔드 우선)
   const activeDayMarkers = useMemo(() => {
     const list = itineraryData[activeDay]?.places || [];
     return list
       .map((p, idx) => {
         const pos = spotCoordsRef.current[p.name];
-        return { key: `day-${p.id}`, title: p.name, order: idx + 1, position: pos, placeId: p.placeId };
+        return {
+       key: `day-${p.id}`,
+       title: p.name,
+       order: idx + 1,
+       position: pos,
+       placeId: p.placeId,
+       backendId: p.backendId || null,    // ✅
+     };
       })
       .filter((m) => !!m.position);
   }, [activeDay, itineraryData]);
@@ -536,9 +583,9 @@ export default function TravelPlanSamplePage() {
         placeId: null
       }))
       .filter((m) => !!m.position);
-  }, []); // ← 이름 오타 없이 정의 (no-undef 해결)
+  }, []);
 
-  // 지도 옵션/중심/맞춤 (변경 없음)
+  // 지도 옵션/중심/맞춤
   const mapOptions = useMemo(() => ({
     disableDefaultUI: false, zoomControl: true, mapTypeControl: false,
     fullscreenControl: false, streetViewControl: false,
@@ -552,7 +599,7 @@ export default function TravelPlanSamplePage() {
   }, []);
   useEffect(() => { if (isLoaded) fitToMarkers(activeDayMarkers); }, [activeDay, isLoaded, fitToMarkers, activeDayMarkers]);
 
-  // 경로 (변경 없음)
+  // 경로
   const buildRouteFromActiveDay = async () => {
     const list = itineraryData[activeDay]?.places || [];
     const coords = list.map((p) => spotCoordsRef.current[p.name]).filter(Boolean);
@@ -578,9 +625,8 @@ export default function TravelPlanSamplePage() {
   };
 
   // 패널 열기 + 혼잡도/주변관광 로딩 트리거
-  const openPanel = async ({ name, placeId, position }) => {
-    const backendId = BACKEND_IDS[name] || dynamicBackendIds[name] || null;
-
+const openPanel = async ({ name, placeId, position, backendId: passedBackendId }) => {
+     const backendId = passedBackendId || BACKEND_IDS[name] || dynamicBackendIds[name] || null;
     setPanelTab(0);
     setSelectedPlace({
       name,
@@ -612,24 +658,37 @@ export default function TravelPlanSamplePage() {
     };
     setSelectedPlace(final);
 
-    // [추가] 혼잡도/주변관광 사전 로딩
+    // 혼잡도
     if (backendId) {
-      // 혼잡도
       getCrowding(backendId).then(setCrowding);
-      // 주변 관광지 (5km 기본)
-      setLoadingSights(true);
-      getNearbyPlacesBE(backendId, 5.0).then((rows) => {
-        const norm = normalizeNearbySights(rows || [], final.position);
-        setNearbySights(norm);
-        setLoadingSights(false);
-      });
     } else {
       setCrowding(null);
-      setNearbySights([]);
+    }
+
+    // 주변 관광지: 백엔드 → 구글 폴백
+    setLoadingSights(true);
+    const svc = ensurePlacesService();
+    if (backendId) {
+      getNearbyPlacesBE(backendId, 5.0, /* includeCrowding */ true)
+        .then((rows) => {
+          const norm = normalizeNearbySights(rows || [], final.position);
+          if (norm.length > 0) {
+            setNearbySights(norm);
+            return null;
+          }
+          // 폴백
+          return getNearbySightsGoogle(svc, new window.google.maps.LatLng(final.position.lat, final.position.lng), 5.0)
+            .then((gRows) => setNearbySights(normalizeGooglePlaces(gRows, final.position)));
+        })
+        .finally(() => setLoadingSights(false));
+    } else {
+      getNearbySightsGoogle(svc, new window.google.maps.LatLng(final.position.lat, final.position.lng), 5.0)
+        .then((gRows) => setNearbySights(normalizeGooglePlaces(gRows, final.position)))
+        .finally(() => setLoadingSights(false));
     }
   };
 
-  // 음식점 로딩: 백엔드 우선 → 구글 폴백 (변경 없음)
+  // 음식점 로딩: 백엔드 우선 → 구글 폴백
   useEffect(() => {
     if (!selectedPlace?.position) return;
     let cancelled = false;
@@ -681,7 +740,7 @@ export default function TravelPlanSamplePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlace, openNowOnly, priceLevels]);
 
-  // 검색창 (변경 없음)
+  // 검색창
   const SearchBox = () => (
     <StandaloneSearchBox
       onLoad={(ref) => (searchBoxRef.current = ref)}
@@ -706,7 +765,7 @@ export default function TravelPlanSamplePage() {
     </StandaloneSearchBox>
   );
 
-  // ▼ 설문 state로 진입 시: 일정 생성 API 호출 (변경 없음)
+  // ▼ 설문 state로 진입 시: 일정 생성 API 호출
   useEffect(() => {
     const navState = location.state;
     if (!navState) return;
@@ -976,7 +1035,7 @@ export default function TravelPlanSamplePage() {
                       {selectedPlace?.details?.formatted_address || "주소 정보 없음"}
                     </Typography>
 
-                    {/* [추가] 혼잡도 표시(간단 Chip) */}
+                    {/* 혼잡도 표시 */}
                     {crowding && (
                       <Box sx={{ mt: 0.75, display: "flex", alignItems: "center", gap: .5, flexWrap: "wrap" }}>
                         <Chip
@@ -1025,7 +1084,7 @@ export default function TravelPlanSamplePage() {
 
               <Divider />
 
-              {/* [수정] 탭 3개: 개요/음식점/주변관광 */}
+              {/* 탭 3개: 개요/음식점/주변관광 */}
               <Tabs value={panelTab} onChange={(_, v) => setPanelTab(v)} variant="fullWidth">
                 <Tab label="개요" />
                 <Tab label="음식점" />
@@ -1109,7 +1168,7 @@ export default function TravelPlanSamplePage() {
                   </Box>
                 )}
 
-                                {/* [추가] 주변 관광지 탭 */}
+                {/* 주변 관광지 탭 */}
                 {panelTab === 2 && (
                   <Box sx={{ p: 2 }}>
                     <Box
@@ -1125,7 +1184,7 @@ export default function TravelPlanSamplePage() {
                       {selectedPlace?.backendId ? (
                         <Chip size="small" color="success" label="출처: Backend" />
                       ) : (
-                        <Chip size="small" color="warning" label="백엔드 장소ID 없음" />
+                        <Chip size="small" color="warning" label="백엔드 장소ID 없음 (Google 폴백)" />
                       )}
                     </Box>
 
@@ -1341,9 +1400,9 @@ export default function TravelPlanSamplePage() {
                             label={`${m.order}`}
                             title={m.title}
                             clusterer={clusterer}
-                            onClick={() =>
-                              openPanel({ name: m.title, placeId: m.placeId, position: m.position })
-                            }
+                            
+                              onClick={() => openPanel({ name: m.title, placeId: m.placeId, position: m.position, backendId: m.backendId })}
+                            
                           />
                         ))}
                         {quickSpotMarkers.map((m) => (
@@ -1352,9 +1411,7 @@ export default function TravelPlanSamplePage() {
                             position={m.position}
                             title={m.title}
                             clusterer={clusterer}
-                            onClick={() =>
-                              openPanel({ name: m.title, placeId: m.placeId, position: m.position })
-                            }
+                            onClick={() => openPanel({ name: m.title, placeId: m.placeId, position: m.position, backendId: m.backendId })}
                           />
                         ))}
                       </>

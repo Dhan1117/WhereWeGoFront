@@ -1,4 +1,4 @@
-// src/pages/SurveyPage.jsx (animated wizard version)
+// src/pages/SurveyPage.jsx
 import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -15,6 +15,7 @@ import {
   Divider,
   FormControl,
   Grid,
+  IconButton,
   InputLabel,
   Link as MLink,
   MenuItem,
@@ -24,6 +25,7 @@ import {
   Stepper,
   Step,
   StepLabel,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import LoginIcon from "@mui/icons-material/Login";
@@ -40,6 +42,7 @@ import SendIcon from "@mui/icons-material/Send";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import PendingIcon from "@mui/icons-material/Pending";
 import PlaceIcon from "@mui/icons-material/Place";
+import { Search as SearchIcon } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 
 // ---------- 환경 변수 ----------
@@ -141,7 +144,6 @@ export default function SurveyPage() {
     try {
       const resp = await apiCall(`${API_BASE}/survey/status`);
       setLoginStatus(resp);
-      // 로그인 되어 있으면 로그인 스텝을 자동 스킵
       setActiveStep(resp.logged_in ? 1 : 0);
       showToast(resp.logged_in ? "로그인됨" : "로그인 필요", resp.logged_in ? "success" : "warning");
     } catch (e) {
@@ -178,7 +180,6 @@ export default function SurveyPage() {
       const data = await apiCall(`${API_BASE}/survey/submit`, { method: "POST", body: surveyData });
       showToast(`설문 제출 완료: ${data.message}`, "success");
       await handleCheckLogin();
-      // 다음 단계로 자동 진행
       setActiveStep(2);
     } catch (e) {
       showToast(`설문 제출 실패: ${e.message}`, "error");
@@ -229,12 +230,22 @@ export default function SurveyPage() {
     return v && v.choice === which && v.item_name === name;
   };
 
+  // --- 투표: 라운드 뷰 (5라운드 제한 & 단일 라운드 화면) ---
+  const rounds = useMemo(() => (placeRecs || []).slice(0, 5), [placeRecs]);
+  const [currentRoundIdx, setCurrentRoundIdx] = useState(0);
+  useEffect(() => {
+    setCurrentRoundIdx(0);
+  }, [placeRecs]);
+  const goPrevRound = () => setCurrentRoundIdx((i) => Math.max(0, i - 1));
+  const goNextRound = () =>
+    setCurrentRoundIdx((i) => Math.min(Math.max(rounds.length - 1, 0), i + 1));
+
   const handleSubmitVotes = async () => {
-    if (!placeRecs?.length) {
+    if (!rounds?.length) {
       showToast("먼저 장소 추천을 받으세요.", "warning");
       return;
     }
-    if (currentVotes.filter(Boolean).length < placeRecs.length) {
+    if (currentVotes.filter(Boolean).length < rounds.length) {
       showToast("모든 라운드에 투표해 주세요.", "warning");
       return;
     }
@@ -243,13 +254,89 @@ export default function SurveyPage() {
       const resp = await apiCall(`${API_BASE}/survey/votes`, { method: "POST", body: { votes: currentVotes } });
       showToast(`투표 제출 완료: ${resp.message}`, "success");
       await handleCheckLogin();
-      setActiveStep(3); // ML 추천 단계로
+      setActiveStep(3);
     } catch (e) {
       showToast(`투표 제출 실패: ${e.message}`, "error");
     } finally {
       setLoading(false);
     }
   };
+
+  // 상세 툴팁: 공통 렌더
+  const DetailTooltipTitle = (p) => (
+    <Box sx={{ p: 0.5 }}>
+      <Typography variant="subtitle2" fontWeight={700}>{p?.name || "이름 없음"}</Typography>
+      <Typography variant="caption">📍 {p?.address || "-"}</Typography><br />
+      <Typography variant="caption">🏷️ {p?.category || "-"}</Typography><br />
+      <Typography variant="caption">⭐ {p?.rating ?? "N/A"}</Typography>
+      {p?.description && (
+        <>
+          <Divider sx={{ my: 0.5 }} />
+          <Typography variant="caption" sx={{ whiteSpace: "pre-wrap" }}>{p.description}</Typography>
+        </>
+      )}
+    </Box>
+  );
+
+  // --- 대형 선택 카드 ---
+  const BigChoiceCard = ({ label, place, selected, onSelect }) => (
+    <Card
+      variant="outlined"
+      onClick={onSelect}
+      sx={{
+        borderColor: selected ? tone.accent : tone.border,
+        transition: "border-color .2s, transform .15s",
+        cursor: "pointer",
+        "&:hover": { borderColor: tone.primary, transform: "translateY(-2px)" },
+      }}
+    >
+      <CardContent sx={{ p: 2.5 }}>
+        <Stack direction="row" alignItems="flex-start" spacing={1}>
+          <PlaceIcon sx={{ color: tone.primary, mt: "2px" }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="h6" fontWeight={800} noWrap>
+              {label}: {place?.name || "-"}
+            </Typography>
+            <Typography variant="body2" sx={{ opacity: 0.8 }} noWrap>
+              📍 {place?.address || "-"}
+            </Typography>
+            <Typography variant="body2" sx={{ opacity: 0.75 }} noWrap>
+              🏷️ {place?.category || "-"} · ⭐ {place?.rating ?? "N/A"}
+            </Typography>
+          </Box>
+          <Tooltip
+            title={DetailTooltipTitle(place)}
+            arrow
+            placement="left"
+            componentsProps={{ tooltip: { sx: { maxWidth: 320 } } }}
+          >
+            <IconButton
+              size="small"
+              onClick={(e) => e.stopPropagation()}
+              aria-label="상세보기"
+            >
+              <SearchIcon />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+
+        {!!(place?.photoUrl || place?.image) && (
+          <Box
+            sx={{
+              mt: 1.5,
+              borderRadius: 2,
+              overflow: "hidden",
+              height: 220,
+              bgcolor: "#f5f6fa",
+              backgroundImage: `url(${place?.photoUrl || place?.image})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
 
   // ---------- 4) ML ----------
   const handleMLRecs = async () => {
@@ -323,7 +410,7 @@ export default function SurveyPage() {
     }
   };
 
-  // ---------- 6) spot-recommend로 이동 (ML 20곳 전달 + user_id 포함) ----------
+  // ---------- 6) spot-recommend로 이동 ----------
   const goSpotRecommend = () => {
     if (!mlRecs?.length) {
       showToast("먼저 ML 추천을 받아주세요.", "warning");
@@ -347,17 +434,28 @@ export default function SurveyPage() {
   const canGoNext = useMemo(() => {
     switch (activeStep) {
       case 0:
-        return loginStatus.logged_in; // 로그인 되어 있으면 다음 가능
+        return loginStatus.logged_in;
       case 1:
         return [activity, activityLevel, time, season, preference].every(Boolean);
       case 2:
-        return placeRecs.length > 0 && currentVotes.filter(Boolean).length === placeRecs.length;
+        return rounds.length > 0 && currentVotes.filter(Boolean).length === rounds.length;
       case 3:
         return mlRecs.length > 0;
       default:
         return true;
     }
-  }, [activeStep, loginStatus, activity, activityLevel, time, season, preference, placeRecs, currentVotes, mlRecs]);
+  }, [
+    activeStep,
+    loginStatus,
+    activity,
+    activityLevel,
+    time,
+    season,
+    preference,
+    rounds,
+    currentVotes,
+    mlRecs,
+  ]);
 
   const handleNext = () => setActiveStep((s) => Math.min(s + 1, steps.length - 1));
   const handleBack = () => setActiveStep((s) => Math.max(s - 1, 0));
@@ -367,15 +465,30 @@ export default function SurveyPage() {
     <Box sx={{ bgcolor: tone.subtle, minHeight: "100vh", py: 6 }}>
       <Container maxWidth="lg">
         {/* 헤더 */}
-        <Card elevation={0} sx={{ mb: 4, border: `1px solid ${tone.border}`, background: `linear-gradient(120deg, ${tone.primarySoft}, #F0FDFA)` }}>
+        <Card
+          elevation={0}
+          sx={{
+            mb: 4,
+            border: `1px solid ${tone.border}`,
+            background: `linear-gradient(120deg, ${tone.primarySoft}, #F0FDFA)`,
+          }}
+        >
           <CardContent>
             <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
               <Box>
-                <Typography variant="h4" fontWeight={800} color={tone.primary}>🗺️ WhereWeGo 설문 시스템</Typography>
-                <Typography variant="body1" sx={{ opacity: 0.8, mt: 0.5 }}>JWT 토큰 기반 보안 설문·추천 테스트</Typography>
+                <Typography variant="h4" fontWeight={800} color={tone.primary}>
+                  🗺️ WhereWeGo 설문 시스템
+                </Typography>
+                <Typography variant="body1" sx={{ opacity: 0.8, mt: 0.5 }}>
+                  JWT 토큰 기반 보안 설문·추천 테스트
+                </Typography>
               </Box>
               <Stack direction="row" spacing={1}>
-                <Chip color={loginStatus.logged_in ? "success" : "default"} label={loginStatus.logged_in ? "로그인됨" : "로그아웃"} variant="filled" />
+                <Chip
+                  color={loginStatus.logged_in ? "success" : "default"}
+                  label={loginStatus.logged_in ? "로그인됨" : "로그아웃"}
+                  variant="filled"
+                />
                 {loading && <CircularProgress size={24} />}
               </Stack>
             </Stack>
@@ -386,7 +499,7 @@ export default function SurveyPage() {
         <Card variant="outlined" sx={{ mb: 3, borderColor: tone.border }}>
           <CardContent>
             <Stepper activeStep={activeStep} alternativeLabel>
-              {steps.map((label, i) => (
+              {steps.map((label) => (
                 <Step key={label}>
                   <StepLabel>{label}</StepLabel>
                 </Step>
@@ -397,17 +510,29 @@ export default function SurveyPage() {
 
         {/* 본문 - 스텝별 애니메이션 컨테이너 */}
         <AnimatePresence mode="wait">
-          {/* STEP 0: 로그인 (로그인 완료 시 자동 스킵) */}
+          {/* STEP 0: 로그인 */}
           {activeStep === 0 && (
-            <motion.div key="step-login" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <motion.div
+              key="step-login"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+            >
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader avatar={<LoginIcon color="primary" />} title="1. 로그인" subheader="Google 또는 Kakao로 로그인하세요" />
+                    <CardHeader
+                      avatar={<LoginIcon color="primary" />}
+                      title="1. 로그인"
+                      subheader="Google 또는 Kakao로 로그인하세요"
+                    />
                     <CardContent>
                       {loginStatus.logged_in ? (
                         <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ mb: 2 }}>
-                          로그인됨 — 설문: <b>{loginStatus.has_survey_data ? "완료" : "미완료"}</b>, 투표: <b>{loginStatus.has_votes ? "완료" : "미완료"}</b>
+                          로그인됨 — 설문: <b>{loginStatus.has_survey_data ? "완료" : "미완료"}</b>, 투표:{" "}
+                          <b>{loginStatus.has_votes ? "완료" : "미완료"}</b>
                         </Alert>
                       ) : (
                         <Alert icon={<ErrorIcon fontSize="inherit" />} severity="warning" sx={{ mb: 2 }}>
@@ -415,19 +540,33 @@ export default function SurveyPage() {
                         </Alert>
                       )}
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                        <Button startIcon={<GoogleIcon />} variant="contained" color="primary" onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}>
+                        <Button
+                          startIcon={<GoogleIcon />}
+                          variant="contained"
+                          color="primary"
+                          onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}
+                        >
                           Google 로그인
                         </Button>
-                        <Button startIcon={<ChatBubbleIcon />} variant="outlined" color="primary" onClick={() => (window.location.href = KAKAO_LOGIN_URL)}>
+                        <Button
+                          startIcon={<ChatBubbleIcon />}
+                          variant="outlined"
+                          color="primary"
+                          onClick={() => (window.location.href = KAKAO_LOGIN_URL)}
+                        >
                           Kakao 로그인
                         </Button>
                       </Stack>
                     </CardContent>
                     <CardActions sx={{ justifyContent: "space-between" }}>
                       <Stack direction="row" spacing={1}>
-                        <Button size="small" onClick={handleCheckLogin}>상태 새로고침</Button>
+                        <Button size="small" onClick={handleCheckLogin}>
+                          상태 새로고침
+                        </Button>
                         {loginStatus.logged_in && (
-                          <Button size="small" variant="contained" onClick={() => setActiveStep(1)}>다음으로</Button>
+                          <Button size="small" variant="contained" onClick={() => setActiveStep(1)}>
+                            다음으로
+                          </Button>
                         )}
                       </Stack>
                       <Button size="small" color="error" startIcon={<LogoutIcon />} onClick={handleLogout}>
@@ -442,29 +581,52 @@ export default function SurveyPage() {
 
           {/* STEP 1: 설문 */}
           {activeStep === 1 && (
-            <motion.div key="step-survey" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <motion.div
+              key="step-survey"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+            >
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader avatar={<ChecklistIcon color="primary" />} title="2. 설문조사" subheader="여행 선호를 선택하세요" />
+                    <CardHeader
+                      avatar={<ChecklistIcon color="primary" />}
+                      title="2. 설문조사"
+                      subheader="여행 선호를 선택하세요"
+                    />
                     <CardContent>
                       <Grid container spacing={2}>
                         <Grid item xs={12} sm={6}>
                           <FormControl fullWidth>
                             <InputLabel>활동 유형</InputLabel>
                             <Select label="활동 유형" value={activity} onChange={(e) => setActivity(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
-                              {["자연풍경", "자연산림", "관람및체험", "휴양", "테마거리", "예술감상", "공연관람", "트레킹"].map((v) => (
-                                <MenuItem key={v} value={v}>{v}</MenuItem>
-                              ))}
+                              <MenuItem value="">
+                                <em>선택</em>
+                              </MenuItem>
+                              {["자연풍경", "자연산림", "관람및체험", "휴양", "테마거리", "예술감상", "공연관람", "트레킹"].map(
+                                (v) => (
+                                  <MenuItem key={v} value={v}>
+                                    {v}
+                                  </MenuItem>
+                                )
+                              )}
                             </Select>
                           </FormControl>
                         </Grid>
                         <Grid item xs={12} sm={6}>
                           <FormControl fullWidth>
                             <InputLabel>활동 수준</InputLabel>
-                            <Select label="활동 수준" value={activityLevel} onChange={(e) => setActivityLevel(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
+                            <Select
+                              label="활동 수준"
+                              value={activityLevel}
+                              onChange={(e) => setActivityLevel(e.target.value)}
+                            >
+                              <MenuItem value="">
+                                <em>선택</em>
+                              </MenuItem>
                               <MenuItem value="낮음">낮음</MenuItem>
                               <MenuItem value="보통">보통</MenuItem>
                               <MenuItem value="높음">높음</MenuItem>
@@ -475,7 +637,9 @@ export default function SurveyPage() {
                           <FormControl fullWidth>
                             <InputLabel>시간대</InputLabel>
                             <Select label="시간대" value={time} onChange={(e) => setTime(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
+                              <MenuItem value="">
+                                <em>선택</em>
+                              </MenuItem>
                               <MenuItem value="오전">오전</MenuItem>
                               <MenuItem value="오후">오후</MenuItem>
                               <MenuItem value="저녁">저녁</MenuItem>
@@ -487,7 +651,9 @@ export default function SurveyPage() {
                           <FormControl fullWidth>
                             <InputLabel>계절</InputLabel>
                             <Select label="계절" value={season} onChange={(e) => setSeason(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
+                              <MenuItem value="">
+                                <em>선택</em>
+                              </MenuItem>
                               <MenuItem value="봄">봄</MenuItem>
                               <MenuItem value="여름">여름</MenuItem>
                               <MenuItem value="가을">가을</MenuItem>
@@ -499,7 +665,9 @@ export default function SurveyPage() {
                           <FormControl fullWidth>
                             <InputLabel>선호도</InputLabel>
                             <Select label="선호도" value={preference} onChange={(e) => setPreference(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
+                              <MenuItem value="">
+                                <em>선택</em>
+                              </MenuItem>
                               <MenuItem value="활동성">활동성</MenuItem>
                               <MenuItem value="휴식">휴식</MenuItem>
                               <MenuItem value="문화">문화</MenuItem>
@@ -510,11 +678,19 @@ export default function SurveyPage() {
                       </Grid>
                     </CardContent>
                     <CardActions sx={{ justifyContent: "space-between" }}>
-                      <Button disabled={activeStep === 0} onClick={handleBack}>뒤로</Button>
+                      <Button disabled={activeStep === 0} onClick={handleBack}>
+                        뒤로
+                      </Button>
                       <Stack direction="row" spacing={1}>
-                        <Button onClick={handleSurveyStatus} startIcon={<PendingIcon />}>설문 상태</Button>
-                        <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>설문 제출</Button>
-                        <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
+                        <Button onClick={handleSurveyStatus} startIcon={<PendingIcon />}>
+                          설문 상태
+                        </Button>
+                        <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>
+                          설문 제출
+                        </Button>
+                        <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>
+                          다음
+                        </Button>
                       </Stack>
                     </CardActions>
                   </Card>
@@ -523,76 +699,138 @@ export default function SurveyPage() {
             </motion.div>
           )}
 
-          {/* STEP 2: 투표 */}
+          {/* STEP 2: 투표 (5라운드 단일뷰) */}
           {activeStep === 2 && (
-            <motion.div key="step-vote" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <motion.div
+              key="step-vote"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+            >
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader avatar={<HowToVoteIcon color="primary" />} title="3. 투표 (라운드 선택)" subheader="추천된 두 장소 중 선호하는 곳을 라운드별로 선택하세요" />
+                    <CardHeader
+                      avatar={<HowToVoteIcon color="primary" />}
+                      title="3. 투표 (라운드 선택)"
+                      subheader="추천된 두 장소 중 선호하는 곳을 라운드별로 선택하세요"
+                    />
                     <CardActions sx={{ px: 2, pt: 0 }}>
-                      <Button onClick={handlePlaceRecs} variant="outlined" startIcon={<TravelExploreIcon />}>장소 추천 받기</Button>
-                      <Button onClick={handleSubmitVotes} variant="contained" startIcon={<HowToVoteIcon />}>투표 제출</Button>
+                      <Button onClick={handlePlaceRecs} variant="outlined" startIcon={<TravelExploreIcon />}>
+                        장소 추천 받기
+                      </Button>
+                      <Button onClick={handleSubmitVotes} variant="contained" startIcon={<HowToVoteIcon />}>
+                        투표 제출
+                      </Button>
                       <Box sx={{ flexGrow: 1 }} />
-                      <Button disabled={activeStep === 0} onClick={handleBack}>뒤로</Button>
-                      <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
+                      <Button disabled={activeStep === 0} onClick={handleBack}>
+                        뒤로
+                      </Button>
+                      <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>
+                        다음
+                      </Button>
                     </CardActions>
 
                     <CardContent>
-                      {!placeRecs.length ? (
+                      {!rounds.length ? (
                         <Alert severity="info">아직 추천이 없습니다. “장소 추천 받기”를 눌러주세요.</Alert>
                       ) : (
-                        <Stack spacing={2} divider={<Divider />}>
-                          {placeRecs.map((round, idx) => (
-                            <Box key={idx}>
-                              <Typography variant="subtitle2" sx={{ mb: 1 }}>라운드 {idx + 1}</Typography>
+                        <>
+                          <Stack
+                            direction="row"
+                            alignItems="center"
+                            justifyContent="space-between"
+                            sx={{ mb: 1 }}
+                          >
+                            <Typography variant="subtitle1" fontWeight={800}>
+                              라운드 {currentRoundIdx + 1} / {rounds.length}
+                            </Typography>
+                            <Stack direction="row" spacing={1}>
+                              <Button size="small" onClick={goPrevRound} disabled={currentRoundIdx === 0}>
+                                이전
+                              </Button>
+                              <Button
+                                size="small"
+                                onClick={goNextRound}
+                                disabled={currentRoundIdx >= rounds.length - 1}
+                              >
+                                다음
+                              </Button>
+                            </Stack>
+                          </Stack>
+                          <Divider sx={{ mb: 2 }} />
+
+                          {(() => {
+                            const round = rounds[currentRoundIdx] || {};
+                            return (
                               <Grid container spacing={2}>
-                                {/* Primary */}
                                 <Grid item xs={12} md={6}>
-                                  <Card
-                                    variant="outlined"
-                                    onClick={() => selectVote(idx, "primary", round?.primary?.name || "Primary")}
-                                    sx={{
-                                      borderColor: isSelected(idx, "primary", round?.primary?.name) ? tone.accent : tone.border,
-                                      cursor: "pointer",
-                                      "&:hover": { borderColor: tone.primary },
-                                    }}
-                                  >
-                                    <CardContent>
-                                      <Stack direction="row" alignItems="center" spacing={1}>
-                                        <PlaceIcon sx={{ color: tone.primary }} />
-                                        <Typography variant="subtitle1" fontWeight={700}>{round?.primary?.name || "Primary"}</Typography>
-                                      </Stack>
-                                      <Typography variant="body2" sx={{ mt: 0.5 }}>📍 {round?.primary?.address || "-"}</Typography>
-                                      <Typography variant="body2" sx={{ opacity: 0.7 }}>🏷️ {round?.primary?.category || "-"}</Typography>
-                                    </CardContent>
-                                  </Card>
+                                  <BigChoiceCard
+                                    label="Primary"
+                                    place={round?.primary}
+                                    selected={isSelected(
+                                      currentRoundIdx,
+                                      "primary",
+                                      round?.primary?.name
+                                    )}
+                                    onSelect={() =>
+                                      selectVote(
+                                        currentRoundIdx,
+                                        "primary",
+                                        round?.primary?.name || "Primary"
+                                      )
+                                    }
+                                  />
                                 </Grid>
-                                {/* Alternative */}
                                 <Grid item xs={12} md={6}>
-                                  <Card
-                                    variant="outlined"
-                                    onClick={() => selectVote(idx, "alternative", round?.alternative?.name || "Alternative")}
-                                    sx={{
-                                      borderColor: isSelected(idx, "alternative", round?.alternative?.name) ? tone.accent : tone.border,
-                                      cursor: "pointer",
-                                      "&:hover": { borderColor: tone.primary },
-                                    }}
-                                  >
-                                    <CardContent>
-                                      <Stack direction="row" alignItems="center" spacing={1}>
-                                        <PlaceIcon sx={{ color: tone.primary }} />
-                                        <Typography variant="subtitle1" fontWeight={700}>{round?.alternative?.name || "Alternative"}</Typography>
-                                      </Stack>
-                                      <Typography variant="body2" sx={{ mt: 0.5 }}>📍 {round?.alternative?.address || "-"}</Typography>
-                                      <Typography variant="body2" sx={{ opacity: 0.7 }}>🏷️ {round?.alternative?.category || "-"}</Typography>
-                                    </CardContent>
-                                  </Card>
+                                  <BigChoiceCard
+                                    label="Alternative"
+                                    place={round?.alternative}
+                                    selected={isSelected(
+                                      currentRoundIdx,
+                                      "alternative",
+                                      round?.alternative?.name
+                                    )}
+                                    onSelect={() =>
+                                      selectVote(
+                                        currentRoundIdx,
+                                        "alternative",
+                                        round?.alternative?.name || "Alternative"
+                                      )
+                                    }
+                                  />
                                 </Grid>
                               </Grid>
-                            </Box>
-                          ))}
-                        </Stack>
+                            );
+                          })()}
+
+                          <Stack
+                            direction="row"
+                            justifyContent="space-between"
+                            alignItems="center"
+                            sx={{ mt: 2 }}
+                          >
+                            <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                              현재 선택:{" "}
+                              {currentVotes[currentRoundIdx]?.choice
+                                ? `${currentVotes[currentRoundIdx].choice} · ${currentVotes[currentRoundIdx].item_name}`
+                                : "없음"}
+                            </Typography>
+                            <Stack direction="row" spacing={1}>
+                              <Button onClick={goPrevRound} disabled={currentRoundIdx === 0}>
+                                이전 라운드
+                              </Button>
+                              <Button
+                                onClick={goNextRound}
+                                disabled={currentRoundIdx >= rounds.length - 1}
+                              >
+                                다음 라운드
+                              </Button>
+                            </Stack>
+                          </Stack>
+                        </>
                       )}
                     </CardContent>
                   </Card>
@@ -603,17 +841,34 @@ export default function SurveyPage() {
 
           {/* STEP 3: ML */}
           {activeStep === 3 && (
-            <motion.div key="step-ml" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <motion.div
+              key="step-ml"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+            >
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader avatar={<ScienceIcon color="primary" />} title="4. ML 모델 추천 (20곳)" subheader="설문과 투표를 기반으로 추천" />
+                    <CardHeader
+                      avatar={<ScienceIcon color="primary" />}
+                      title="4. ML 모델 추천 (20곳)"
+                      subheader="설문과 투표를 기반으로 추천"
+                    />
                     <CardActions sx={{ px: 2, pt: 0 }}>
-                      <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>ML 추천 받기</Button>
-                      <Button variant="text" onClick={handleModelStatus}>모델 상태 확인</Button>
+                      <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>
+                        ML 추천 받기
+                      </Button>
+                      <Button variant="text" onClick={handleModelStatus}>
+                        모델 상태 확인
+                      </Button>
                       <Box sx={{ flexGrow: 1 }} />
                       <Button onClick={handleBack}>뒤로</Button>
-                      <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
+                      <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>
+                        다음
+                      </Button>
                     </CardActions>
                     <CardContent sx={{ maxHeight: 420, overflow: "auto" }}>
                       {!mlRecs.length ? (
@@ -621,13 +876,27 @@ export default function SurveyPage() {
                       ) : (
                         <Stack spacing={1.5}>
                           {mlRecs.map((p, i) => (
-                            <Box key={p._id || p.id || i} sx={{ p: 1.25, border: `1px solid ${tone.border}`, borderRadius: 1.5, bgcolor: tone.paper }}>
-                              <Typography variant="subtitle2" fontWeight={700}>{i + 1}. {p.name || "이름 없음"}</Typography>
+                            <Box
+                              key={p._id || p.id || i}
+                              sx={{
+                                p: 1.25,
+                                border: `1px solid ${tone.border}`,
+                                borderRadius: 1.5,
+                                bgcolor: tone.paper,
+                              }}
+                            >
+                              <Typography variant="subtitle2" fontWeight={700}>
+                                {i + 1}. {p.name || "이름 없음"}
+                              </Typography>
                               <Typography variant="body2">📍 {p.address || "-"}</Typography>
-                              <Typography variant="body2" sx={{ opacity: 0.75 }}>🏷️ {p.category || "-"}</Typography>
+                              <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                                🏷️ {p.category || "-"}
+                              </Typography>
                               <Typography variant="body2">⭐ 평점: {p.rating ?? "N/A"}</Typography>
                               {p.description && (
-                                <Typography variant="body2" sx={{ mt: 0.5 }}>📝 {p.description}</Typography>
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                  📝 {p.description}
+                                </Typography>
                               )}
                             </Box>
                           ))}
@@ -636,7 +905,9 @@ export default function SurveyPage() {
                     </CardContent>
                     <CardActions sx={{ px: 2, pt: 0 }}>
                       <Box sx={{ flexGrow: 1 }} />
-                      <Button variant="contained" onClick={goSpotRecommend}>관광지 고르러 가기</Button>
+                      <Button variant="contained" onClick={goSpotRecommend}>
+                        관광지 고르러 가기
+                      </Button>
                     </CardActions>
                   </Card>
                 </Grid>
@@ -646,16 +917,34 @@ export default function SurveyPage() {
 
           {/* STEP 4: 관리 / 테스트 */}
           {activeStep === 4 && (
-            <motion.div key="step-admin" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <motion.div
+              key="step-admin"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+            >
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <Card variant="outlined" sx={{ borderColor: tone.border }}>
                     <CardHeader title="5. 관리 / 6. 테스트" />
                     <CardActions sx={{ px: 2, pb: 2 }}>
-                      <Button color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll}>모든 데이터 초기화</Button>
+                      <Button
+                        color="error"
+                        variant="outlined"
+                        startIcon={<RestartAltIcon />}
+                        onClick={handleResetAll}
+                      >
+                        모든 데이터 초기화
+                      </Button>
                       <Box sx={{ flexGrow: 1 }} />
-                      <Button variant="text" onClick={handleTestGet}>GET 테스트</Button>
-                      <Button variant="text" onClick={handleTestPost}>POST 테스트</Button>
+                      <Button variant="text" onClick={handleTestGet}>
+                        GET 테스트
+                      </Button>
+                      <Button variant="text" onClick={handleTestPost}>
+                        POST 테스트
+                      </Button>
                       <Button onClick={handleBack}>뒤로</Button>
                     </CardActions>
                   </Card>
@@ -666,16 +955,31 @@ export default function SurveyPage() {
         </AnimatePresence>
 
         {/* 하단 */}
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 3 }}>
+        <Stack
+          direction="row"
+          justifyContent="space-between"
+          alignItems="center"
+          sx={{ mt: 3 }}
+        >
           <Typography variant="caption" sx={{ opacity: 0.6 }}>
-            API Base: <MLink href={API_BASE} target="_blank" rel="noreferrer">{API_BASE}</MLink>
+            API Base:{" "}
+            <MLink href={API_BASE} target="_blank" rel="noreferrer">
+              {API_BASE}
+            </MLink>
           </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.6 }}>프론트는 쿠키 인증 사용 (credentials: include)</Typography>
+          <Typography variant="caption" sx={{ opacity: 0.6 }}>
+            프론트는 쿠키 인증 사용 (credentials: include)
+          </Typography>
         </Stack>
       </Container>
 
       {/* 토스트 */}
-      <Snackbar open={toast.open} autoHideDuration={5000} onClose={closeToast} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={5000}
+        onClose={closeToast}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
         <Alert onClose={closeToast} severity={toast.severity} sx={{ width: "100%" }}>
           <span style={{ whiteSpace: "pre-line" }}>{toast.message}</span>
         </Alert>

@@ -247,6 +247,7 @@ const TouristSpotRecommendPage = () => {
       const compact = {
         id,
         name: spot.name,
+        backendId: id, 
         image: googlePhoto && !isPlaceholder(googlePhoto) ? googlePhoto : spot.image,
         category: spot.category,
         rating: spot.rating,
