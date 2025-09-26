@@ -26,22 +26,24 @@ import axios from "axios";
 import { listPlans, savePlan, getPlan, deletePlan } from "../utils/planStorage";
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 공통 no-wrap 스타일 (변경 없음)
+// 공통 no-wrap 스타일
 const noWrapSx = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
 
-// 스타일 (변경 없음)
+// 스타일
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   borderRadius: theme.spacing(2),
   boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
 }));
 
+// ★ 고정 vh 제거 → 반응형 높이로 교체
 const MapShell = styled(Box)(({ theme }) => ({
-  height: "78vh",
-  minHeight: 640,
+  height: "clamp(420px, 62dvh, 72dvh)", // 화면에 맞게 유연하게
   borderRadius: theme.spacing(1.5),
   overflow: "hidden",
   position: "relative",
+  display: "flex",
+  flexDirection: "column",
 }));
 
 const LeftPlacePanel = styled(Box)(({ theme }) => ({
@@ -54,6 +56,11 @@ const LeftPlacePanel = styled(Box)(({ theme }) => ({
   overflow: "hidden",
   display: "flex",
   flexDirection: "column",
+  // 작은 화면에서 가로 꽉 차게
+  [theme.breakpoints.down("md")]: {
+    width: "100%",
+    maxWidth: "100%",
+  },
 }));
 
 const PanelHeaderImage = styled("div")({
@@ -74,7 +81,7 @@ const DayTabContainer = styled(Box)(({ theme }) => ({
   "&::-webkit-scrollbar-thumb:hover": { background: "#a8a8a8" },
 }));
 
-// Day 버튼 (변경 없음)
+// Day 버튼
 const CompactDayButton = styled(
   Button,
   { shouldForwardProp: (prop) => prop !== "active" }
@@ -92,7 +99,6 @@ const CompactDayButton = styled(
 }));
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 좌표 샘플(초기값) — 백엔드 응답으로 동적 보완 (변경 없음)
 const BUSAN_CENTER = { lat: 35.1796, lng: 129.0756 };
 const SPOT_COORDS = {
   "해운대 해수욕장": { lat: 35.1587, lng: 129.1604 },
@@ -113,13 +119,11 @@ const SPOT_COORDS = {
   "기장시장": { lat: 35.2445, lng: 129.2223 },
 };
 
-// (선택) 고정 매핑 (변경 없음)
 const BACKEND_IDS = {
   "태종대": "681891fa77e67d6ebadae372",
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 간단 유틸 (변경 없음)
 const toLatLng = (g) => ({ lat: g.lat(), lng: g.lng() });
 const haversine = (a, b) => {
   const R = 6371e3;
@@ -131,14 +135,13 @@ const haversine = (a, b) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 백엔드 연동 유틸
+// 백엔드 연동
 const API_PREFIX =
   process.env.REACT_APP_API_PREFIX ||
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_PREFIX) ||
   "http://localhost:8000";
 const API_BASE = `${API_PREFIX.replace(/\/$/, "")}/api/v1`;
 
-// 일정 생성 (변경 없음)
 async function generateItinerary(requestData) {
   try {
     const res = await fetch(`${API_BASE}/generate`, {
@@ -154,7 +157,6 @@ async function generateItinerary(requestData) {
   }
 }
 
-// 안전 JSON fetch (credentials 포함)
 async function safeFetchJson(url) {
   try {
     const r = await fetch(url, { mode: "cors", credentials: "include" });
@@ -164,28 +166,21 @@ async function safeFetchJson(url) {
     return null;
   }
 }
-
-// 주변 카페/식당(백엔드)
 async function getNearbyCafesBE(placeId, maxDistance = 2.0) {
   return (await safeFetchJson(`${API_BASE}/nearby/cafes/${placeId}?max_distance=${maxDistance}`)) || [];
 }
 async function getNearbyRestaurantsBE(placeId, maxDistance = 1.5) {
   return (await safeFetchJson(`${API_BASE}/nearby/restaurants/${placeId}?max_distance=${maxDistance}`)) || [];
 }
-
-// 주변 관광지(백엔드)
 async function getNearbyPlacesBE(placeId, maxDistance = 5.0, includeCrowding = false) {
   const url = `${API_BASE}/nearby/${placeId}?max_distance=${maxDistance}` +
               (includeCrowding ? `&include_crowding=true` : "");
   return (await safeFetchJson(url)) || [];
 }
-
-// 혼잡도 조회
 async function getCrowding(placeId) {
   return await safeFetchJson(`${API_BASE}/place/crowding/${placeId}`);
 }
 
-// 백엔드 응답 → 화면용 포맷 (음식/카페 공통)
 function normalizeBackendPlaces(rows = [], center) {
   const out = [];
   for (const r of rows) {
@@ -206,8 +201,6 @@ function normalizeBackendPlaces(rows = [], center) {
   out.sort((a, b) => a._distM - b._distM);
   return out;
 }
-
-// Google Places 결과 → 동일 스키마로 정규화
 function normalizeGooglePlaces(rows = [], center) {
   const out = [];
   for (const r of rows) {
@@ -228,16 +221,9 @@ function normalizeGooglePlaces(rows = [], center) {
   out.sort((a, b) => a._distM - b._distM);
   return out;
 }
-
-// 관광지 목록 포맷
 function normalizeNearbySights(rows = [], center) {
-  return normalizeBackendPlaces(rows, center).map(r => ({
-    ...r,
-    isSight: true,
-  }));
+  return normalizeBackendPlaces(rows, center).map(r => ({ ...r, isSight: true }));
 }
-
-// Google Places: 주변 관광지(폴백)
 async function getNearbySightsGoogle(placesService, centerLatLng, radiusKm = 5.0) {
   if (!placesService || !centerLatLng) return [];
   const request = {
@@ -247,13 +233,11 @@ async function getNearbySightsGoogle(placesService, centerLatLng, radiusKm = 5.0
     language: "ko",
   };
   return await new Promise((resolve) => {
-    placesService.nearbySearch(request, (results) => {
-      resolve(results || []);
-    });
+    placesService.nearbySearch(request, (results) => resolve(results || []));
   });
 }
 
-// ── 코스 API 래퍼 (변경 없음)
+// 코스 API
 export const saveCourse = async (payload) => {
   const { data } = await axios.post(`${API_BASE}/save`, payload);
   return data;
@@ -288,13 +272,13 @@ export default function TravelPlanSamplePage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // 상태들 (대부분 변경 없음)
+  // 상태
   const [activeDay, setActiveDay] = useState(0);
   const [expandedDays, setExpandedDays] = useState(new Set([0]));
-  const [panelTab, setPanelTab] = useState(0);  // 0:개요 1:음식점 2:주변관광
+  const [panelTab, setPanelTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // 일정 데이터 (초기 샘플) (변경 없음)
+  // 일정 데이터 (샘플 초기값)
   const [itineraryData, setItineraryData] = useState([
     { date: "2026. 8. 21.", dayName: "Day 1", places: [
       { id: "1", name: "감천문화마을", placeId: null, time: "14:00", icon: <MuseumIcon/> },
@@ -307,10 +291,10 @@ export default function TravelPlanSamplePage() {
     ]},
   ]);
 
-  // 주변 관광지/혼잡도 상태
-  const [nearbySights, setNearbySights] = useState([]);     // 주변 관광지 리스트
+  // 주변 관광지/혼잡도
+  const [nearbySights, setNearbySights] = useState([]);
   const [loadingSights, setLoadingSights] = useState(false);
-  const [crowding, setCrowding] = useState(null);           // { level, updated_at, ... } 가정
+  const [crowding, setCrowding] = useState(null);
 
   // 선택 장소/주변 음식점
   const [selectedPlace, setSelectedPlace] = useState(null);
@@ -319,7 +303,7 @@ export default function TravelPlanSamplePage() {
   const [foodSource, setFoodSource] = useState("google");
   const loadSeqRef = useRef(0);
 
-  // 음식점 탭: 무한 스크롤
+  // 무한 스크롤
   const [displayCount, setDisplayCount] = useState(5);
   const sentinelRef = useRef(null);
   useEffect(() => { setDisplayCount(5); }, [nearbyFoods, panelTab, selectedPlace?.backendId, foodSource]);
@@ -328,9 +312,7 @@ export default function TravelPlanSamplePage() {
     const el = sentinelRef.current;
     if (!el) return;
     const io = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        setDisplayCount((c) => Math.min(c + 5, nearbyFoods.length));
-      }
+      if (entries[0].isIntersecting) setDisplayCount((c) => Math.min(c + 5, nearbyFoods.length));
     }, { root: null, rootMargin: "120px", threshold: 0 });
     io.observe(el);
     return () => io.disconnect();
@@ -344,7 +326,7 @@ export default function TravelPlanSamplePage() {
   const [route, setRoute] = useState(null);
   const [showRoute, setShowRoute] = useState(false);
 
-  // Google 객체/서비스
+  // Google
   const mapRef = useRef(null);
   const placesServiceRef = useRef(null);
   const searchBoxRef = useRef(null);
@@ -382,7 +364,7 @@ export default function TravelPlanSamplePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 저장/불러오기 UI
+  // 저장/불러오기
   const [openLoadDlg, setOpenLoadDlg] = useState(false);
   const [plans, setPlans] = useState([]);
   const [snack, setSnack] = useState({ open: false, msg: "" });
@@ -494,7 +476,7 @@ export default function TravelPlanSamplePage() {
       svc.nearbySearch(request, (results) => resolve((results || []).slice(0, 20)));
     });
 
-  // ▼ 추천에서 넘어온 관광지(spots)를 일정에 바로 반영
+  // ▼ 추천에서 넘어온 관광지(spots)를 일정에 반영
   async function enrichSpotsWithDetails(spots, center) {
     const out = [];
     for (const s of spots) {
@@ -518,7 +500,7 @@ export default function TravelPlanSamplePage() {
         name: s.name,
         time: "",
         placeId: placeId || null,
-        ackendId: s.backendId || s.id || null,
+        backendId: s.backendId || s.id || null, // ✅ 오타 수정 (ackendId → backendId)
         address: s.address || detail?.formatted_address || "",
         rating: typeof s.rating === "number" ? s.rating : (detail?.rating ?? null),
       });
@@ -537,7 +519,6 @@ export default function TravelPlanSamplePage() {
       arr.push(slice);
       idx += MAX_PER_DAY;
     }
-    // 남은 아이템은 추가 일차로 자동 생성
     while (idx < items.length) {
       arr.push(items.slice(idx, idx + MAX_PER_DAY));
       days += 1;
@@ -545,7 +526,6 @@ export default function TravelPlanSamplePage() {
     }
     return arr;
   }
-
   function timeForIndex(i) {
     const base = 10 * 60;
     const mins = base + i * 120;
@@ -561,13 +541,13 @@ export default function TravelPlanSamplePage() {
       .map((p, idx) => {
         const pos = spotCoordsRef.current[p.name];
         return {
-       key: `day-${p.id}`,
-       title: p.name,
-       order: idx + 1,
-       position: pos,
-       placeId: p.placeId,
-       backendId: p.backendId || null,    // ✅
-     };
+          key: `day-${p.id}`,
+          title: p.name,
+          order: idx + 1,
+          position: pos,
+          placeId: p.placeId,
+          backendId: p.backendId || null,
+        };
       })
       .filter((m) => !!m.position);
   }, [activeDay, itineraryData]);
@@ -624,9 +604,10 @@ export default function TravelPlanSamplePage() {
     );
   };
 
-  // 패널 열기 + 혼잡도/주변관광 로딩 트리거
-const openPanel = async ({ name, placeId, position, backendId: passedBackendId }) => {
-     const backendId = passedBackendId || BACKEND_IDS[name] || dynamicBackendIds[name] || null;
+  // 패널 열기 + 혼잡도/주변관광
+  const openPanel = async ({ name, placeId, position, backendId: passedBackendId }) => {
+    const backendId = passedBackendId || BACKEND_IDS[name] || dynamicBackendIds[name] || null;
+
     setPanelTab(0);
     setSelectedPlace({
       name,
@@ -658,25 +639,20 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
     };
     setSelectedPlace(final);
 
-    // 혼잡도
-    if (backendId) {
-      getCrowding(backendId).then(setCrowding);
-    } else {
-      setCrowding(null);
-    }
+    if (backendId) getCrowding(backendId).then(setCrowding);
+    else setCrowding(null);
 
     // 주변 관광지: 백엔드 → 구글 폴백
     setLoadingSights(true);
     const svc = ensurePlacesService();
     if (backendId) {
-      getNearbyPlacesBE(backendId, 5.0, /* includeCrowding */ true)
+      getNearbyPlacesBE(backendId, 5.0, true)
         .then((rows) => {
           const norm = normalizeNearbySights(rows || [], final.position);
           if (norm.length > 0) {
             setNearbySights(norm);
             return null;
           }
-          // 폴백
           return getNearbySightsGoogle(svc, new window.google.maps.LatLng(final.position.lat, final.position.lng), 5.0)
             .then((gRows) => setNearbySights(normalizeGooglePlaces(gRows, final.position)));
         })
@@ -765,7 +741,7 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
     </StandaloneSearchBox>
   );
 
-  // ▼ 설문 state로 진입 시: 일정 생성 API 호출
+  // 설문에서 들어온 파라미터 기반 자동 일정 생성
   useEffect(() => {
     const navState = location.state;
     if (!navState) return;
@@ -845,7 +821,7 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-  // ▼ 추천 페이지에서 넘어온 선택 관광지(state.spots)만으로도 일정 구성 (+하루 6개 제한 적용)
+  // 추천 페이지에서 넘어온 선택 관광지만으로 일정 구성
   useEffect(() => {
     const navState = location.state;
     const picked = navState?.spots;
@@ -855,13 +831,10 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
       try {
         const center = activeDayMarkers[0]?.position || BUSAN_CENTER;
 
-        // 좌표/place_id 보강
         const enriched = await enrichSpotsWithDetails(picked, center);
 
-        // 여행 일수 (없으면 1일)
         const days = Number(navState?.travelDuration) > 0 ? Number(navState.travelDuration) : 1;
 
-        // 일수 분배 + 시간 할당 (하루 6개 제한)
         const buckets = distributeIntoDays(enriched, days);
         const baseDate = new Date(navState?.travelStartDate || Date.now());
 
@@ -893,7 +866,6 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-  // 코스 저장(서버) 예시 (변경 없음)
   const handleSaveCourseToServer = async () => {
     try {
       const navState = location.state || {};
@@ -906,7 +878,6 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
     }
   };
 
-  // 일정 편집 — 장소 추가/삭제/순서변경 (변경 없음)
   const addPlaceToDay = async (dayIndex, place) => {
     const dayId = dayIndex + 1;
     setItineraryData((prev) =>
@@ -987,8 +958,13 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
 
   // ────────────────────────────────────────────────────────────────────────────
   return (
-    <Box sx={{ bgcolor: "#f8f9fa", minHeight: "100vh" }}>
-      <GlobalStyles styles={{ "*, *::before, *::after": { wordBreak: "keep-all" } }} />
+    <Box sx={{ bgcolor: "#f8f9fa", minHeight: "100dvh" }}>
+      {/* Safari/모바일에서 100vh 깜빡임 방지 */}
+      <GlobalStyles
+        styles={{
+          "html, body, #root": { minHeight: "100dvh" },
+        }}
+      />
 
       <Box
         sx={{
@@ -1002,10 +978,15 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
           mx: "auto",
         }}
       >
-        {/* 왼쪽 패널 */}
+        {/* 왼쪽 패널 (선택 시 표시) */}
         {selectedPlace && (
           <Box sx={{ flex: "0 0 auto" }}>
-            <LeftPlacePanel>
+            <LeftPlacePanel
+              sx={{
+                maxHeight: "calc(100dvh - 120px)", // 화면에 맞춤
+                overflowY: "auto",
+              }}
+            >
               <PanelHeaderImage
                 style={{
                   backgroundImage: `url(${selectedPlace.photoUrl || ""})`,
@@ -1038,11 +1019,7 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
                     {/* 혼잡도 표시 */}
                     {crowding && (
                       <Box sx={{ mt: 0.75, display: "flex", alignItems: "center", gap: .5, flexWrap: "wrap" }}>
-                        <Chip
-                          size="small"
-                          color="warning"
-                          label={`혼잡도: ${crowding.level ?? "정보없음"}`}
-                        />
+                        <Chip size="small" color="warning" label={`혼잡도: ${crowding.level ?? "정보없음"}`} />
                         {crowding.updated_at && (
                           <Typography variant="caption" color="text.secondary">
                             업데이트: {new Date(crowding.updated_at).toLocaleString()}
@@ -1091,7 +1068,7 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
                 <Tab label="주변관광" />
               </Tabs>
 
-              <Box sx={{ flex: 1, overflowY: "auto" }}>
+              <Box sx={{ flex: 1 }}>
                 {/* 개요 */}
                 {panelTab === 0 && (
                   <Box sx={{ p: 2 }}>
@@ -1171,15 +1148,7 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
                 {/* 주변 관광지 탭 */}
                 {panelTab === 2 && (
                   <Box sx={{ p: 2 }}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1,
-                        mb: 1,
-                        flexWrap: "wrap",
-                      }}
-                    >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" }}>
                       <Chip size="small" variant="outlined" label="반경 5km 기준" />
                       {selectedPlace?.backendId ? (
                         <Chip size="small" color="success" label="출처: Backend" />
@@ -1214,77 +1183,34 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
                             lat != null && lng != null ? { lat, lng } : undefined;
 
                           return (
-                            <Paper
-                              key={s.place_id || s._id || s.name}
-                              sx={{ p: 1.25, border: "1px solid #eee" }}
-                            >
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 1,
-                                }}
-                              >
-                                <Avatar
-                                  sx={{
-                                    width: 28,
-                                    height: 28,
-                                    fontSize: 12,
-                                    bgcolor: "#1976d2",
-                                    color: "white",
-                                  }}
-                                >
+                            <Paper key={s.place_id || s._id || s.name} sx={{ p: 1.25, border: "1px solid #eee" }}>
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                <Avatar sx={{ width: 28, height: 28, fontSize: 12, bgcolor: "#1976d2", color: "white" }}>
                                   <MuseumIcon sx={{ fontSize: 16 }} />
                                 </Avatar>
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                                  <Typography
-                                    variant="subtitle2"
-                                    sx={{ fontWeight: 700, ...noWrapSx }}
-                                  >
+                                  <Typography variant="subtitle2" sx={{ fontWeight: 700, ...noWrapSx }}>
                                     {s.name}
                                   </Typography>
 
                                   {typeof s.rating === "number" && (
-                                    <Box
-                                      sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 0.5,
-                                      }}
-                                    >
-                                      <Rating
-                                        size="small"
-                                        value={Number(s.rating)}
-                                        precision={0.1}
-                                        readOnly
-                                      />
+                                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                      <Rating size="small" value={Number(s.rating)} precision={0.1} readOnly />
                                       <Typography variant="caption" sx={noWrapSx}>
-                                        {s.rating} (
-                                        {s.user_ratings_total?.toLocaleString?.() || 0})
+                                        {s.rating} ({s.user_ratings_total?.toLocaleString?.() || 0})
                                       </Typography>
                                     </Box>
                                   )}
 
-                                  <Typography
-                                    variant="caption"
-                                    sx={{ color: "text.secondary", ...noWrapSx }}
-                                  >
+                                  <Typography variant="caption" sx={{ color: "text.secondary", ...noWrapSx }}>
                                     {s.vicinity}
                                   </Typography>
 
-                                  {typeof s._distM === "number" &&
-                                    isFinite(s._distM) && (
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          display: "block",
-                                          mt: 0.25,
-                                          color: "text.secondary",
-                                        }}
-                                      >
-                                        약 {(s._distM / 1000).toFixed(2)} km
-                                      </Typography>
-                                    )}
+                                  {typeof s._distM === "number" && isFinite(s._distM) && (
+                                    <Typography variant="caption" sx={{ display: "block", mt: 0.25, color: "text.secondary" }}>
+                                      약 {(s._distM / 1000).toFixed(2)} km
+                                    </Typography>
+                                  )}
                                 </Box>
 
                                 <Button
@@ -1315,7 +1241,7 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
 
         {/* 가운데: 지도 */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <StyledPaper sx={{ mb: 3 }}>
+          <StyledPaper sx={{ mb: 3, display: "flex", flexDirection: "column" }}>
             <Box
               sx={{
                 mb: 2,
@@ -1372,6 +1298,7 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
               sx={{ bgcolor: "#e3f2fd", color: "#1976d2", mb: 2, ...noWrapSx }}
             />
 
+            {/* ★ 지도 영역: 남는 공간 자동 채우기 */}
             <MapShell>
               {loadError && (
                 <Box sx={{ p: 2, color: "error.main" }}>
@@ -1400,9 +1327,7 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
                             label={`${m.order}`}
                             title={m.title}
                             clusterer={clusterer}
-                            
-                              onClick={() => openPanel({ name: m.title, placeId: m.placeId, position: m.position, backendId: m.backendId })}
-                            
+                            onClick={() => openPanel({ name: m.title, placeId: m.placeId, position: m.position, backendId: m.backendId })}
                           />
                         ))}
                         {quickSpotMarkers.map((m) => (
@@ -1429,6 +1354,7 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
             </MapShell>
           </StyledPaper>
 
+          {/* 아래 카드 영역 (페이지 스크롤 허용) */}
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <Paper
@@ -1477,10 +1403,11 @@ const openPanel = async ({ name, placeId, position, backendId: passedBackendId }
             width: { xs: "100%", lg: 440 },
             borderRadius: 2,
             boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-            maxHeight: "calc(100vh - 120px)",
+            maxHeight: "calc(100dvh - 120px)",   // ★ dvh 사용
             display: "flex",
             flexDirection: "column",
             flex: "0 0 auto",
+            overflow: "hidden", // 내부 컨텐츠만 스크롤
           }}
         >
           <Box sx={{ p: 3, borderBottom: "1px solid #e0e0e0" }}>

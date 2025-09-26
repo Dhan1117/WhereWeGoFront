@@ -4,22 +4,21 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   Box, Paper, Typography, Grid, Card, CardContent, CardMedia,
   Chip, Rating, Button, TextField, InputAdornment, Stack,
-  Divider, IconButton, Alert, Skeleton, Accordion, AccordionSummary, AccordionDetails
+  Divider, IconButton, Alert, Skeleton, Accordion, AccordionSummary, AccordionDetails,
+  Tooltip
 } from "@mui/material";
 import {
   Search as SearchIcon,
   LocationOn as LocationOnIcon,
-  Star as StarIcon,
   Favorite as FavoriteIcon,
   FavoriteBorder as FavoriteBorderIcon,
   Share as ShareIcon,
   Museum as MuseumIcon,
-  AccessTime,
-  AttachMoney as MoneyIcon,
   Refresh as RefreshIcon,
   Psychology as AIIcon,
   Delete as DeleteIcon,
-  ExpandMore as ExpandMoreIcon
+  ExpandMore as ExpandMoreIcon,
+  PriorityHigh as PriorityHighIcon
 } from "@mui/icons-material";
 import { styled } from "@mui/material/styles";
 import { useLoadScript } from "@react-google-maps/api";
@@ -36,10 +35,7 @@ const StyledCard = styled(Card)(({ theme }) => ({
   height: "100%",
   transition: "all 0.3s ease",
   cursor: "pointer",
-  "&:hover": {
-    transform: "translateY(-4px)",
-    boxShadow: theme.shadows[8],
-  },
+  "&:hover": { transform: "translateY(-4px)", boxShadow: theme.shadows[8] },
 }));
 const AIChip = styled(Chip)(({ theme }) => ({
   background: "linear-gradient(45deg, #6366F1, #06B6D4)",
@@ -60,11 +56,42 @@ const SelectedCard = styled(Card)(({ theme }) => ({
 const isPlaceholder = (url) => !url || url.includes("/api/placeholder");
 const BUSAN_CENTER = { lat: 35.1796, lng: 129.0756 };
 
+// ML 점수/플래그 유틸
+const getMlScoreValue = (spot) => {
+  const raw =
+    spot?.ml_score ?? spot?.mlScore ?? spot?.score ??
+    spot?.similarity ?? spot?.similarity_score ??
+    spot?.relevance ?? spot?.model_score ??
+    spot?.rankScore ?? spot?.rank ?? null;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : null;
+};
+const formatMlScore = (num) => {
+  if (num == null) return null;
+  if (num >= 0 && num <= 1) return `${Math.round(num * 100)}%`;
+  return num.toFixed(1);
+};
+const isMlRecommended = (spot) => {
+  const tags = (spot?.tags || []).map((t) => String(t).toLowerCase());
+  return Boolean(
+    getMlScoreValue(spot) != null ||
+    ["ml", "ai", "ml추천", "ai추천"].some((k) => tags.includes(k)) ||
+    spot?.source === "ml" || spot?.origin === "ml" || spot?.is_ml === true
+  );
+};
+const isDevRecommended = (spot) => {
+  const tags = (spot?.tags || []).map((t) => String(t));
+  return Boolean(
+    spot?.dev_recommended || spot?.curated ||
+    spot?.source === "dev" || spot?.origin === "dev" ||
+    tags.includes("개발자추천") || tags.includes("운영자추천") || tags.includes("추천")
+  );
+};
+
 // (서버 wish API)
 async function addWish({ user_id, place_id }) {
   const res = await fetch(`${API_BASE}/wish`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id, place_id }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -72,8 +99,7 @@ async function addWish({ user_id, place_id }) {
 }
 async function removeWish({ user_id, place_id }) {
   const res = await fetch(`${API_BASE}/wish`, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
+    method: "DELETE", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id, place_id }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -98,6 +124,7 @@ const TouristSpotRecommendPage = () => {
   const initialAttractions = Array.isArray(location.state?.attractions)
     ? location.state.attractions
     : [];
+  const fromMlList = location.state?.isMlList === true || location.state?.source === "ml";
 
   // Google Places
   const { isLoaded, loadError } = useLoadScript({
@@ -125,21 +152,19 @@ const TouristSpotRecommendPage = () => {
   const [photoMap, setPhotoMap] = useState({});
   const [wishSet, setWishSet] = useState(new Set()); // place_id Set
 
-  // ML에서 넘어온 20개 기준
+  // 초기 ML 20개 반영
   useEffect(() => {
     setTouristSpots(initialAttractions);
     setExpanded(initialAttractions.length > 0);
   }, [initialAttractions]);
 
-  // 위시 상태 불러오기
+  // 위시 상태
   useEffect(() => {
     if (!userId || !touristSpots.length) return;
     let cancelled = false;
     (async () => {
       const results = await Promise.allSettled(
-        touristSpots.map((s) =>
-          getWishStatus({ user_id: userId, place_id: String(s.id || s._id) })
-        )
+        touristSpots.map((s) => getWishStatus({ user_id: userId, place_id: String(s.id || s._id) }))
       );
       if (cancelled) return;
       const next = new Set();
@@ -151,9 +176,7 @@ const TouristSpotRecommendPage = () => {
       });
       setWishSet(next);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [userId, touristSpots]);
 
   // 사진 보강(Google)
@@ -173,19 +196,14 @@ const TouristSpotRecommendPage = () => {
         radius: 50000,
         language: "ko",
       };
-      // Text search
       const place = await new Promise((resolve) => {
         svc.textSearch(request, (results) =>
           resolve(Array.isArray(results) && results.length ? results[0] : null)
         );
       });
       if (!place?.place_id) return;
-      // Details(photos)
       const detail = await new Promise((resolve) => {
-        svc.getDetails(
-          { placeId: place.place_id, language: "ko", fields: ["photos"] },
-          (d) => resolve(d || null)
-        );
+        svc.getDetails({ placeId: place.place_id, language: "ko", fields: ["photos"] }, (d) => resolve(d || null));
       });
       const url = detail?.photos?.[0]?.getUrl({ maxWidth: 1200, maxHeight: 900 });
       if (url) setPhoto(id, url);
@@ -201,11 +219,10 @@ const TouristSpotRecommendPage = () => {
     });
   }, [isLoaded, touristSpots, fetchPhotoForName]);
 
-  // 추천 새로고침(샘플: 그대로 유지)
+  // 새 추천(샘플)
   const fetchRecommendations = async () => {
     setLoading(true);
     try {
-      // 백엔드 새 추천을 붙이고 싶다면 여기를 교체
       await new Promise((r) => setTimeout(r, 800));
     } finally {
       setLoading(false);
@@ -218,7 +235,6 @@ const TouristSpotRecommendPage = () => {
     const place_id = String(spot.id || spot._id);
     if (!place_id) return;
     const isWished = wishSet.has(place_id);
-    // 낙관적
     setWishSet((prev) => {
       const n = new Set(prev);
       isWished ? n.delete(place_id) : n.add(place_id);
@@ -228,7 +244,6 @@ const TouristSpotRecommendPage = () => {
       if (isWished) await removeWish({ user_id: userId, place_id });
       else await addWish({ user_id: userId, place_id });
     } catch {
-      // 롤백
       setWishSet((prev) => {
         const n = new Set(prev);
         isWished ? n.add(place_id) : n.delete(place_id);
@@ -247,7 +262,7 @@ const TouristSpotRecommendPage = () => {
       const compact = {
         id,
         name: spot.name,
-        backendId: id, 
+        backendId: id,
         image: googlePhoto && !isPlaceholder(googlePhoto) ? googlePhoto : spot.image,
         category: spot.category,
         rating: spot.rating,
@@ -257,6 +272,9 @@ const TouristSpotRecommendPage = () => {
         distance: spot.distance,
         lat: spot.lat,
         lng: spot.lng,
+        ml_score: spot.ml_score ?? spot.mlScore ?? spot.score ?? null,
+        source: spot.source || spot.origin || (fromMlList ? "ml" : null),
+        dev_recommended: spot.dev_recommended || spot.curated || false,
       };
       setSelectedSpots((prev) => [...prev, compact]);
       if (!expanded) setExpanded(true);
@@ -300,69 +318,41 @@ const TouristSpotRecommendPage = () => {
   );
 
   const goMakeCourse = () => {
-    // 선택한 관광지들을 TravelPlan 페이지로 전달
     navigate("/travel-plan", {
-      state: {
-        user_id: userId,
-        spots: selectedSpots,
-      },
+      state: { user_id: userId, spots: selectedSpots },
     });
   };
 
   return (
-    <Box
-      sx={{
-        maxWidth: 1440,
-        margin: "0 auto",
-        p: 3,
-        pt: 20,
-        display: "flex",
-        gap: 3,
-        alignItems: "flex-start",
-      }}
-    >
+    <Box sx={{ maxWidth: 1440, margin: "0 auto", p: 3, pt: 20, display: "flex", gap: 3, alignItems: "flex-start" }}>
       {/* Left */}
       <Box sx={{ flex: 3 }}>
-        <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
+        <Paper sx={{ p: 3, mb: 3, borderRadius: 2, position: "relative" }}>
           <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
             <AIIcon sx={{ fontSize: 32, color: "#6366F1", mr: 2 }} />
             <Box sx={{ flex: 1 }}>
-              <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-                AI 추천 관광지
-              </Typography>
-              <Typography variant="body1" color="text.secondary">
-                ML 결과로 받은 부산 관광지 20곳
-              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>AI 추천 관광지</Typography>
+              <Typography variant="body1" color="text.secondary">ML 결과로 받은 부산 관광지 20곳</Typography>
             </Box>
-            <Button
-              variant="outlined"
-              startIcon={<RefreshIcon />}
-              onClick={fetchRecommendations}
-              disabled={loading}
-            >
+            <Button variant="outlined" startIcon={<RefreshIcon />} onClick={fetchRecommendations} disabled={loading}>
               새로고침
             </Button>
           </Box>
 
           <AIChip icon={<AIIcon />} label={`AI 분석 완료 - ${touristSpots.length}곳`} sx={{ mb: 3 }} />
 
-          {/* Search & Filter */}
+          {/* Search */}
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
             <TextField
               placeholder="관광지명 또는 태그로 검색..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-              }}
+              InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon /></InputAdornment>) }}
               sx={{ flex: 1 }}
             />
           </Stack>
 
+          {/* Filter */}
           <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
             {categories.map((category) => (
               <Chip
@@ -374,13 +364,45 @@ const TouristSpotRecommendPage = () => {
               />
             ))}
           </Stack>
+
+          {/* 🔔 단 하나의 느낌표(!) 아이콘 + 툴팁 (박스 우하단) */}
+          <Tooltip
+            arrow
+            placement="left"
+            title={
+              <Box sx={{ lineHeight: 1.6 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  이 페이지 사용 팁
+                </Typography>
+                <Typography variant="body2">
+                  • 카드 이미지 좌상단의 <b>ML %</b>는 모델 점수예요.<br/>
+                  • 태그 옆 <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff" }}/> /
+                  <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff", ml: .5 }}/> 배지도 함께 확인하세요.<br/>
+                  • 마음에 드는 곳은 <b>일정에 추가</b>로 담고, 우측 패널에서 <b>코스 짜기</b>로 이동!
+                </Typography>
+              </Box>
+            }
+          >
+            <IconButton
+              size="small"
+              sx={{
+                position: "absolute",
+                bottom: 12,
+                right: 12,
+                bgcolor: "rgba(255,255,255,0.95)",
+                boxShadow: 1,
+                "&:hover": { bgcolor: "rgba(255,255,255,1)" }
+              }}
+              aria-label="도움말"
+            >
+              <PriorityHighIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Paper>
 
         {loading && (
           <Grid container spacing={3}>
-            {[...Array(4)].map((_, i) => (
-              <SpotSkeleton key={i} />
-            ))}
+            {[...Array(4)].map((_, i) => (<SpotSkeleton key={i} />))}
           </Grid>
         )}
 
@@ -390,8 +412,12 @@ const TouristSpotRecommendPage = () => {
               const id = String(spot.id || spot._id);
               const isSel = selectedSpots.some((s) => String(s.id) === id);
               const googlePhoto = photoMap[id];
-              const finalImage =
-                googlePhoto && !isPlaceholder(googlePhoto) ? googlePhoto : spot.image;
+              const finalImage = googlePhoto && !isPlaceholder(googlePhoto) ? googlePhoto : spot.image;
+
+              const mlVal = getMlScoreValue(spot);
+              const mlText = formatMlScore(mlVal);
+              const showMl = fromMlList || isMlRecommended(spot);
+              const showDev = isDevRecommended(spot);
 
               return (
                 <Grid item xs={12} md={6} key={id}>
@@ -404,62 +430,48 @@ const TouristSpotRecommendPage = () => {
                   >
                     <Box sx={{ position: "relative", height: 200 }}>
                       {finalImage && !isPlaceholder(finalImage) ? (
-                        <CardMedia
-                          component="img"
-                          image={finalImage}
-                          alt={spot.name}
-                          sx={{ height: "100%", width: "100%", objectFit: "cover" }}
-                        />
+                        <CardMedia component="img" image={finalImage} alt={spot.name} sx={{ height: "100%", width: "100%", objectFit: "cover" }} />
                       ) : (
                         <CardMedia
                           component="div"
-                          sx={{
-                            height: "100%",
-                            backgroundColor: "#eef3ff",
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center",
-                          }}
+                          sx={{ height: "100%", backgroundColor: "#eef3ff", display: "flex", justifyContent: "center", alignItems: "center" }}
                         >
                           <MuseumIcon sx={{ fontSize: 60, color: "#666" }} />
                         </CardMedia>
                       )}
 
-                      {/* 위시 버튼 */}
+                      {/* ML 점수 - 좌상단 (유지) */}
+                      {showMl && (
+                        <Chip
+                          label={mlText ? `ML ${mlText}` : "ML"}
+                          size="small"
+                          color="primary"
+                          sx={{
+                            position: "absolute",
+                            top: 8,
+                            left: 8,
+                            bgcolor: "rgba(99,102,241,0.95)",
+                            color: "#fff",
+                            fontWeight: 700,
+                          }}
+                        />
+                      )}
+
+                      {/* 위시 버튼 - 우상단 */}
                       <IconButton
-                        sx={{
-                          position: "absolute",
-                          top: 8,
-                          right: 8,
-                          backgroundColor: "rgba(255,255,255,0.9)",
-                        }}
+                        sx={{ position: "absolute", top: 8, right: 8, backgroundColor: "rgba(255,255,255,0.9)" }}
                         onClick={() => toggleWish(spot)}
                         aria-label={wishSet.has(id) ? "찜 해제" : "찜 추가"}
                       >
-                        {wishSet.has(id) ? (
-                          <FavoriteIcon sx={{ color: "#FF6B6B" }} />
-                        ) : (
-                          <FavoriteBorderIcon />
-                        )}
+                        {wishSet.has(id) ? <FavoriteIcon sx={{ color: "#FF6B6B" }} /> : <FavoriteBorderIcon />}
                       </IconButton>
                     </Box>
 
                     <CardContent>
                       {/* 제목 */}
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
-                          mb: 1,
-                        }}
-                      >
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          {spot.name}
-                        </Typography>
-                        <IconButton size="small">
-                          <ShareIcon fontSize="small" />
-                        </IconButton>
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>{spot.name}</Typography>
+                        <IconButton size="small"><ShareIcon fontSize="small" /></IconButton>
                       </Box>
 
                       {/* 주소/거리 */}
@@ -475,25 +487,21 @@ const TouristSpotRecommendPage = () => {
                       {typeof spot.rating === "number" && (
                         <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
                           <Rating value={spot.rating} precision={0.1} size="small" readOnly />
-                          <Typography variant="body2" sx={{ ml: 1 }}>
-                            {spot.rating}
-                          </Typography>
+                          <Typography variant="body2" sx={{ ml: 1 }}>{spot.rating}</Typography>
                         </Box>
                       )}
 
                       {/* 설명 */}
                       {spot.description && (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ mb: 2, lineHeight: 1.6 }}
-                        >
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
                           {spot.description}
                         </Typography>
                       )}
 
-                      {/* 태그 */}
+                      {/* 추천 출처 Chip + 태그 */}
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 2 }}>
+                        {showMl && <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff" }} />}
+                        {showDev && <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff" }} />}
                         {(spot.tags || []).slice(0, 3).map((tag, i) => (
                           <Chip key={i} label={tag} size="small" variant="outlined" />
                         ))}
@@ -502,24 +510,9 @@ const TouristSpotRecommendPage = () => {
                       <Divider sx={{ my: 2 }} />
 
                       {/* 하단 액션 */}
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                      >
-                        <Chip
-                          label={spot.category || "미분류"}
-                          size="small"
-                          sx={{ backgroundColor: "#f0f0f0", color: "#666" }}
-                        />
-                        <Button
-                          variant="contained"
-                          size="small"
-                          onClick={() => addToSelectedSpots(spot)}
-                          disabled={isSel}
-                        >
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Chip label={spot.category || "미분류"} size="small" sx={{ backgroundColor: "#f0f0f0", color: "#666" }} />
+                        <Button variant="contained" size="small" onClick={() => addToSelectedSpots(spot)} disabled={isSel}>
                           {isSel ? "추가됨" : "일정에 추가"}
                         </Button>
                       </Box>
@@ -534,24 +527,13 @@ const TouristSpotRecommendPage = () => {
         {!loading && filteredSpots.length === 0 && touristSpots.length > 0 && (
           <Paper sx={{ p: 4, textAlign: "center", mt: 3 }}>
             <MuseumIcon sx={{ fontSize: 60, color: "#ccc", mb: 2 }} />
-            <Typography variant="h6" color="text.secondary">
-              검색 결과가 없습니다
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              다른 검색어나 카테고리를 선택해보세요
-            </Typography>
+            <Typography variant="h6" color="text.secondary">검색 결과가 없습니다</Typography>
+            <Typography variant="body2" color="text.secondary">다른 검색어나 카테고리를 선택해보세요</Typography>
           </Paper>
         )}
 
         {!loading && touristSpots.length === 0 && (
-          <Alert
-            severity="error"
-            action={
-              <Button color="inherit" size="small" onClick={fetchRecommendations}>
-                다시 시도
-              </Button>
-            }
-          >
+          <Alert severity="error" action={<Button color="inherit" size="small" onClick={fetchRecommendations}>다시 시도</Button>}>
             추천 데이터를 불러오지 못했습니다.
           </Alert>
         )}
@@ -561,21 +543,17 @@ const TouristSpotRecommendPage = () => {
       <Accordion
         expanded={expanded}
         onChange={() => setExpanded((prev) => !prev)}
-        disableGutters
-        elevation={0}
+        disableGutters elevation={0}
         sx={{
-          width: 460,
-          minWidth: 400,
+          width: 460, minWidth: 400,
           border: selectedSpots.length === 0 ? "none" : "1px solid #ddd",
           borderRadius: 2,
           backgroundColor: selectedSpots.length === 0 ? "transparent" : "#fafafa",
           boxShadow: "none",
           alignSelf: "flex-start",
-          position: "sticky",
-          top: 80,
+          position: "sticky", top: 80,
           maxHeight: "calc(100vh - 100px)",
-          overflowY: "auto",
-          zIndex: 10,
+          overflowY: "auto", zIndex: 10,
         }}
       >
         <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 2, py: 1.5 }}>
@@ -584,15 +562,7 @@ const TouristSpotRecommendPage = () => {
               담은 관광지 ({selectedSpots.length})
             </Typography>
             {selectedSpots.length > 0 && (
-              <Button
-                size="small"
-                variant="outlined"
-                color="error"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clearSelected();
-                }}
-              >
+              <Button size="small" variant="outlined" color="error" onClick={(e) => { e.stopPropagation(); clearSelected(); }}>
                 전체 비우기
               </Button>
             )}
@@ -610,41 +580,18 @@ const TouristSpotRecommendPage = () => {
             selectedSpots.map((spot) => {
               const id = String(spot.id);
               const googlePhoto = photoMap[id];
-              const finalImage =
-                googlePhoto && !isPlaceholder(googlePhoto) ? googlePhoto : spot.image;
+              const finalImage = googlePhoto && !isPlaceholder(googlePhoto) ? googlePhoto : spot.image;
 
               return (
                 <SelectedCard key={id}>
                   <CardContent sx={{ p: 1.5 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                       {/* 썸네일 */}
-                      <Box
-                        sx={{
-                          width: 112,
-                          height: 84,
-                          borderRadius: 1.2,
-                          overflow: "hidden",
-                          flex: "0 0 auto",
-                          bgcolor: "#eef3ff",
-                        }}
-                      >
+                      <Box sx={{ width: 112, height: 84, borderRadius: 1.2, overflow: "hidden", flex: "0 0 auto", bgcolor: "#eef3ff", position: "relative" }}>
                         {finalImage && !isPlaceholder(finalImage) ? (
-                          <CardMedia
-                            component="img"
-                            image={finalImage}
-                            alt={spot.name}
-                            sx={{ width: "100%", height: "100%", objectFit: "cover" }}
-                          />
+                          <CardMedia component="img" image={finalImage} alt={spot.name} sx={{ width: "100%", height: "100%", objectFit: "cover" }} />
                         ) : (
-                          <Box
-                            sx={{
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
+                          <Box sx={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <MuseumIcon sx={{ fontSize: 38, color: "#9aa5b1" }} />
                           </Box>
                         )}
@@ -656,23 +603,15 @@ const TouristSpotRecommendPage = () => {
                           <Typography
                             variant="subtitle1"
                             sx={{
-                              fontWeight: 700,
-                              lineHeight: 1.2,
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                              wordBreak: "keep-all",
+                              fontWeight: 700, lineHeight: 1.2,
+                              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                              overflow: "hidden", wordBreak: "keep-all",
                             }}
                             title={spot.name}
                           >
                             {spot.name}
                           </Typography>
-                          <Chip
-                            size="small"
-                            label={spot.category || "미분류"}
-                            sx={{ bgcolor: "#f2f2f2", color: "#666" }}
-                          />
+                          <Chip size="small" label={spot.category || "미분류"} sx={{ bgcolor: "#f2f2f2", color: "#666" }} />
                         </Box>
 
                         {typeof spot.rating === "number" && (
@@ -682,29 +621,13 @@ const TouristSpotRecommendPage = () => {
                           </Stack>
                         )}
 
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{
-                            mt: 0.25,
-                            display: "block",
-                            wordBreak: "keep-all",
-                            whiteSpace: "normal",
-                          }}
-                          title={spot.address}
-                        >
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: "block", wordBreak: "keep-all", whiteSpace: "normal" }} title={spot.address}>
                           {spot.address}
                         </Typography>
                       </Box>
 
                       {/* 액션 */}
-                      <IconButton
-                        color="error"
-                        onClick={() => removeFromSelectedSpots(id)}
-                        size="small"
-                        sx={{ ml: 0.5 }}
-                        aria-label={`${spot.name} 제거`}
-                      >
+                      <IconButton color="error" onClick={() => removeFromSelectedSpots(id)} size="small" sx={{ ml: 0.5 }} aria-label={`${spot.name} 제거`}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Box>
@@ -714,30 +637,14 @@ const TouristSpotRecommendPage = () => {
             })
           )}
           <Box sx={{ display: "flex", gap: 1, mt: 2, justifyContent: "flex-end" }}>
-            <Button
-              variant="outlined"
-              color="error"
-              onClick={clearSelected}
-              disabled={selectedSpots.length === 0}
-            >
-              전체 비우기
-            </Button>
-            <Button
-              variant="contained"
-              onClick={goMakeCourse}
-              disabled={selectedSpots.length === 0}
-            >
-              코스 짜기
-            </Button>
+            <Button variant="outlined" color="error" onClick={clearSelected} disabled={selectedSpots.length === 0}>전체 비우기</Button>
+            <Button variant="contained" onClick={goMakeCourse} disabled={selectedSpots.length === 0}>코스 짜기</Button>
           </Box>
         </AccordionDetails>
       </Accordion>
 
       {/* PlacesService 더미 */}
-      <div
-        ref={placesDivRef}
-        style={{ width: 0, height: 0, overflow: "hidden", position: "absolute" }}
-      />
+      <div ref={placesDivRef} style={{ width: 0, height: 0, overflow: "hidden", position: "absolute" }} />
       {loadError && (
         <Alert severity="error" sx={{ position: "fixed", bottom: 16, right: 16 }}>
           Google Maps/Places 로딩 오류: API 키와 권한을 확인하세요.
