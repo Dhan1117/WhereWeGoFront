@@ -375,9 +375,9 @@ const TouristSpotRecommendPage = () => {
                   이 페이지 사용 팁
                 </Typography>
                 <Typography variant="body2">
-                  • 카드 이미지 좌상단의 <b>ML %</b>는 모델 점수예요.<br/>
-                  • 태그 옆 <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff" }}/> /
-                  <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff", ml: .5 }}/> 배지도 함께 확인하세요.<br/>
+                  • 카드 이미지 좌상단의 <b>ML %</b>는 모델 점수예요.<br />
+                  • 태그 옆 <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff" }} /> /
+                  <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff", ml: .5 }} /> 배지도 함께 확인하세요.<br />
                   • 마음에 드는 곳은 <b>일정에 추가</b>로 담고, 우측 패널에서 <b>코스 짜기</b>로 이동!
                 </Typography>
               </Box>
@@ -561,11 +561,23 @@ const TouristSpotRecommendPage = () => {
             <Typography variant="h6" sx={{ fontWeight: 700, flex: 1 }}>
               담은 관광지 ({selectedSpots.length})
             </Typography>
-            {selectedSpots.length > 0 && (
-              <Button size="small" variant="outlined" color="error" onClick={(e) => { e.stopPropagation(); clearSelected(); }}>
-                전체 비우기
-              </Button>
-            )}
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              onClick={(e) => { e.stopPropagation(); clearSelected(); }}
+              disabled={selectedSpots.length === 0}
+            >
+              전체 비우기
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={(e) => { e.stopPropagation(); goMakeCourse(); }}
+              disabled={selectedSpots.length === 0}
+            >
+              코스 짜기
+            </Button>
           </Box>
         </AccordionSummary>
 
@@ -636,10 +648,7 @@ const TouristSpotRecommendPage = () => {
               );
             })
           )}
-          <Box sx={{ display: "flex", gap: 1, mt: 2, justifyContent: "flex-end" }}>
-            <Button variant="outlined" color="error" onClick={clearSelected} disabled={selectedSpots.length === 0}>전체 비우기</Button>
-            <Button variant="contained" onClick={goMakeCourse} disabled={selectedSpots.length === 0}>코스 짜기</Button>
-          </Box>
+
         </AccordionDetails>
       </Accordion>
 

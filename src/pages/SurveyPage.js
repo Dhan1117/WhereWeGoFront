@@ -6,7 +6,9 @@ import {
   Chip, CircularProgress, Container, Divider, FormControl, Grid,
   IconButton, InputLabel, Link as MLink, MenuItem, Select, Snackbar,
   Stack, Stepper, Step, StepLabel, Tooltip, Typography,
+  Skeleton, Badge, MobileStepper, Paper, useMediaQuery
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import LoginIcon from "@mui/icons-material/Login";
 import GoogleIcon from "@mui/icons-material/Google";
 import ChatBubbleIcon from "@mui/icons-material/ChatBubble";
@@ -20,8 +22,11 @@ import SendIcon from "@mui/icons-material/Send";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import PendingIcon from "@mui/icons-material/Pending";
 import PlaceIcon from "@mui/icons-material/Place";
-import { Search as SearchIcon } from "@mui/icons-material";
+import { Search as SearchIcon, ArrowBack, ArrowForward } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
+
+// ✅ UA 기반 감지 추가
+import { isMobile as isMobileUA, isAndroid, isIOS } from "react-device-detect";
 
 // ---------- 환경 변수 ----------
 const API_PREFIX =
@@ -114,9 +119,109 @@ const pageTransition = { type: "spring", stiffness: 260, damping: 24 };
 
 const steps = ["로그인", "설문", "투표", "ML 추천", "관리/테스트"];
 
+// ---------- 공용 컴포넌트 ----------
+const DetailTooltipTitle = (p) => (
+  <Box sx={{ p: 0.5 }}>
+    <Typography variant="subtitle2" fontWeight={700}>{p?.name || "이름 없음"}</Typography>
+    <Typography variant="caption">📍 {p?.address || "-"}</Typography><br />
+    <Typography variant="caption">🏷️ {p?.category || "-"}</Typography><br />
+    <Typography variant="caption">⭐ {p?.rating ?? "N/A"}</Typography>
+    {p?.description && (
+      <>
+        <Divider sx={{ my: 0.5 }} />
+        <Typography variant="caption" sx={{ whiteSpace: "pre-wrap" }}>{p.description}</Typography>
+      </>
+    )}
+  </Box>
+);
+
+const BigChoiceCard = ({ label, place, selected, onSelect, compact = false }) => {
+  const [src, setSrc] = useState("");
+  const [imgLoaded, setImgLoaded] = useState(false);
+  useEffect(() => {
+    const url = extractPhotoUrl(place) || PLACEHOLDER_URL;
+    setImgLoaded(false);
+    setSrc(url);
+  }, [place]);
+
+  return (
+    <Badge
+      invisible={!selected}
+      overlap="circular"
+      anchorOrigin={{ vertical: "top", horizontal: "left" }}
+      badgeContent={<Chip label="선택됨" color="success" size="small" sx={{ fontWeight: 700 }} />}
+      sx={{ width: "100%" }}
+    >
+      <Card
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onSelect()}
+        variant="outlined"
+        onClick={onSelect}
+        sx={{
+          outline: "none",
+          borderColor: selected ? tone.accent : tone.border,
+          transition: "border-color .2s, transform .12s, box-shadow .2s",
+          cursor: "pointer",
+          position: "relative",
+          "&:hover": {
+            borderColor: tone.primary,
+            transform: "translateY(-2px)",
+            boxShadow: "0 12px 30px rgba(0,0,0,0.06)",
+          },
+          ...(selected && { boxShadow: `0 0 0 3px ${tone.accent}33 inset` }),
+        }}
+      >
+        <CardContent sx={{ p: compact ? 2.25 : { xs: 2.75, md: 3 } }}>
+          <Stack direction="row" alignItems="flex-start" spacing={1.25} sx={{ mb: 1 }}>
+            <PlaceIcon sx={{ color: tone.primary, mt: "3px", fontSize: 22 }} />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="h6" fontWeight={900} noWrap>
+                {compact ? label + " · " : ""}{place?.name || "-"}
+              </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.9 }} noWrap>📍 {place?.address || "-"}</Typography>
+              <Typography variant="body2" sx={{ opacity: 0.8 }} noWrap>🏷️ {place?.category || "-"} · ⭐ {place?.rating ?? "N/A"}</Typography>
+            </Box>
+            <Tooltip title={DetailTooltipTitle(place)} arrow placement="left" componentsProps={{ tooltip: { sx: { maxWidth: 320 } } }}>
+              <IconButton size="small" onClick={(e) => e.stopPropagation()} aria-label="상세보기">
+                <SearchIcon />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+
+          <Box sx={{ mt: 1.25, borderRadius: 2.5, overflow: "hidden", bgcolor: "#eef2f7", position: "relative", aspectRatio: "16/9" }}>
+            {!imgLoaded && <Skeleton variant="rectangular" width="100%" height="100%" />}
+            <img
+              src={src}
+              alt={place?.name || "place"}
+              loading="lazy"
+              style={{ display: imgLoaded ? "block" : "none", width: "100%", height: "100%", objectFit: "cover" }}
+              onLoad={() => setImgLoaded(true)}
+              onError={(e) => { e.currentTarget.src = PLACEHOLDER_URL; setImgLoaded(true); }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Box>
+        </CardContent>
+      </Card>
+    </Badge>
+  );
+};
+
 // ---------- 메인 ----------
 export default function SurveyPage() {
   const navigate = useNavigate();
+  const theme = useTheme();
+
+  // ✅ 화면폭 기반 감지
+  const isViewportMobile = useMediaQuery(theme.breakpoints.down("sm")); // <= 600px
+  // ✅ UA 기반 감지(실디바이스)
+  const isDeviceMobile = isMobileUA || isAndroid || isIOS;
+
+  // ✅ 최종 모바일 판정 + URL 강제 스위치 (?m=1 / ?m=0)
+  const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  let finalIsMobile = isDeviceMobile || isViewportMobile;
+  if (params.get("m") === "1") finalIsMobile = true;
+  if (params.get("m") === "0") finalIsMobile = false;
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -136,22 +241,17 @@ export default function SurveyPage() {
 
   // 설문 입력
   const [activity, setActivity] = useState("");
-  const [activityLevel, setActivityLevel] = useState(""); // 활동성
+  const [activityLevel, setActivityLevel] = useState("");
   const [time, setTime] = useState("");
   const [season, setSeason] = useState("");
-  const [preference, setPreference] = useState(""); // 중요 요소(활동성/시간대)
+  const [preference, setPreference] = useState("");
 
   // 추천/투표/ML
   const [placeRecs, setPlaceRecs] = useState([]);
   const [currentVotes, setCurrentVotes] = useState([]);
   const [mlRecs, setMlRecs] = useState([]);
 
-  useEffect(() => {
-    (async () => {
-      await handleCheckLogin();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { (async () => { await handleCheckLogin(); })(); /* eslint-disable-next-line */ }, []);
 
   const showToast = (message, severity = "info") => setToast({ open: true, message, severity });
   const closeToast = () => setToast((t) => ({ ...t, open: false }));
@@ -192,7 +292,6 @@ export default function SurveyPage() {
       showToast("모든 설문 항목을 선택해 주세요.", "warning");
       return;
     }
-
     setLoading(true);
     try {
       const data = await apiCall(`${API_BASE}/survey/submit`, { method: "POST", body: surveyData });
@@ -248,41 +347,28 @@ export default function SurveyPage() {
     return v && v.choice === which && v.item_name === name;
   };
 
-  // 5라운드 제한 & 단일 라운드 화면, 선택 시 자동 이동
+  // 5라운드 제한 & 단일 라운드 화면
   const rounds = useMemo(() => (placeRecs || []).slice(0, 5), [placeRecs]);
   const [currentRoundIdx, setCurrentRoundIdx] = useState(0);
-  useEffect(() => {
-    setCurrentRoundIdx(0);
-  }, [placeRecs]);
+  useEffect(() => { setCurrentRoundIdx(0); }, [placeRecs]);
 
   // 스텝2 진입 시 자동 추천 호출
   useEffect(() => {
-    if (activeStep === 2 && (placeRecs?.length ?? 0) === 0) {
-      handlePlaceRecs();
-    }
+    if (activeStep === 2 && (placeRecs?.length ?? 0) === 0) handlePlaceRecs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep]);
 
   const handleSelectAndAdvance = (roundIdx, which, name) => {
     selectVote(roundIdx, which, name);
     setTimeout(() => {
-      if (roundIdx < rounds.length - 1) {
-        setCurrentRoundIdx(roundIdx + 1);
-      } else {
-        showToast("마지막 라운드 선택 완료! '투표 제출'을 눌러주세요.", "info");
-      }
+      if (roundIdx < rounds.length - 1) setCurrentRoundIdx(roundIdx + 1);
+      else showToast("마지막 라운드 선택 완료! '투표 제출'을 눌러주세요.", "info");
     }, 120);
   };
 
   const handleSubmitVotes = async () => {
-    if (!rounds?.length) {
-      showToast("추천이 아직 준비되지 않았습니다.", "warning");
-      return;
-    }
-    if (currentVotes.filter(Boolean).length < rounds.length) {
-      showToast("모든 라운드에 투표해 주세요.", "warning");
-      return;
-    }
+    if (!rounds?.length) { showToast("추천이 아직 준비되지 않았습니다.", "warning"); return; }
+    if (currentVotes.filter(Boolean).length < rounds.length) { showToast("모든 라운드에 투표해 주세요.", "warning"); return; }
     setLoading(true);
     try {
       const resp = await apiCall(`${API_BASE}/survey/votes`, { method: "POST", body: { votes: currentVotes } });
@@ -294,79 +380,6 @@ export default function SurveyPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // 상세 툴팁
-  const DetailTooltipTitle = (p) => (
-    <Box sx={{ p: 0.5 }}>
-      <Typography variant="subtitle2" fontWeight={700}>{p?.name || "이름 없음"}</Typography>
-      <Typography variant="caption">📍 {p?.address || "-"}</Typography><br />
-      <Typography variant="caption">🏷️ {p?.category || "-"}</Typography><br />
-      <Typography variant="caption">⭐ {p?.rating ?? "N/A"}</Typography>
-      {p?.description && (
-        <>
-          <Divider sx={{ my: 0.5 }} />
-          <Typography variant="caption" sx={{ whiteSpace: "pre-wrap" }}>{p.description}</Typography>
-        </>
-      )}
-    </Box>
-  );
-
-  // --- 대형 선택 카드 ---
-  const BigChoiceCard = ({ label, place, selected, onSelect }) => {
-    const [src, setSrc] = useState(() => extractPhotoUrl(place) || PLACEHOLDER_URL);
-    useEffect(() => {
-      const url = extractPhotoUrl(place) || PLACEHOLDER_URL;
-      setSrc(url);
-    }, [place]);
-
-    return (
-      <Card
-        variant="outlined"
-        onClick={onSelect}
-        sx={{
-          borderColor: selected ? tone.accent : tone.border,
-          transition: "border-color .2s, transform .15s, box-shadow .2s",
-          cursor: "pointer",
-          "&:hover": { borderColor: tone.primary, transform: "translateY(-2px)", boxShadow: "0 12px 30px rgba(0,0,0,0.06)" },
-        }}
-      >
-        <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-          <Stack direction="row" alignItems="flex-start" spacing={1.25}>
-            <PlaceIcon sx={{ color: tone.primary, mt: "3px", fontSize: 24 }} />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h5" fontWeight={900} noWrap>
-                {label}: {place?.name || "-"}
-              </Typography>
-              <Typography variant="body1" sx={{ opacity: 0.8 }} noWrap>
-                📍 {place?.address || "-"}
-              </Typography>
-              <Typography variant="body1" sx={{ opacity: 0.75 }} noWrap>
-                🏷️ {place?.category || "-"} · ⭐ {place?.rating ?? "N/A"}
-              </Typography>
-            </Box>
-            <Tooltip title={DetailTooltipTitle(place)} arrow placement="left" componentsProps={{ tooltip: { sx: { maxWidth: 360 } } }}>
-              <IconButton size="medium" onClick={(e) => e.stopPropagation()} aria-label="상세보기">
-                <SearchIcon />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-
-          <Box sx={{ mt: 2, borderRadius: 3, overflow: "hidden", bgcolor: "#eef2f7" }}>
-            <img
-              src={src}
-              alt={place?.name || "place"}
-              loading="lazy"
-              style={{ display: "block", width: "100%", height: "auto", maxHeight: 360, objectFit: "cover" }}
-              onError={(e) => {
-                if (e.currentTarget.src !== PLACEHOLDER_URL) e.currentTarget.src = PLACEHOLDER_URL;
-              }}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </Box>
-        </CardContent>
-      </Card>
-    );
   };
 
   // ---------- 4) ML ----------
@@ -440,10 +453,7 @@ export default function SurveyPage() {
 
   // ---------- 6) spot-recommend로 이동 ----------
   const goSpotRecommend = () => {
-    if (!mlRecs?.length) {
-      showToast("먼저 ML 추천을 받아주세요.", "warning");
-      return;
-    }
+    if (!mlRecs?.length) { showToast("먼저 ML 추천을 받아주세요.", "warning"); return; }
     const attractions = mlRecs.map((p, i) => ({
       id: p._id || p.id || String(i + 1),
       name: p.name,
@@ -454,7 +464,6 @@ export default function SurveyPage() {
       category: p.category,
       description: p.description,
       image: p.photoUrl || p.image || "",
-      // === ML 점수/출처/이유 추가 ===
       ml_score:
         p.ml_score ?? p.mlScore ?? p.score ?? p.similarity ?? p.similarity_score ??
         p.relevance ?? p.model_score ?? p.rankScore ?? p.rank ?? null,
@@ -485,293 +494,507 @@ export default function SurveyPage() {
   const handleNext = () => setActiveStep((s) => Math.min(s + 1, steps.length - 1));
   const handleBack = () => setActiveStep((s) => Math.max(s - 1, 0));
 
+  // =======================
+  //  Desktop Layout (기존)
+  // =======================
+  const DesktopView = () => (
+    <>
+      {/* 헤더 */}
+      <Card elevation={0} sx={{ mb: 4, border: `1px solid ${tone.border}`, background: `linear-gradient(120deg, ${tone.primarySoft}, #F0FDFA)` }}>
+        <CardContent>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+            <Box>
+              <Typography variant="h4" fontWeight={800} color={tone.primary}>🗺️ WhereWeGo 설문 시스템</Typography>
+              <Typography variant="body1" sx={{ opacity: 0.8, mt: 0.5 }}>JWT 토큰 기반 보안 설문·추천 테스트</Typography>
+            </Box>
+            <Stack direction="row" spacing={1}>
+              <Chip color={loginStatus.logged_in ? "success" : "default"} label={loginStatus.logged_in ? "로그인됨" : "로그아웃"} variant="filled" />
+              {loading && <CircularProgress size={24} />}
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {/* 스텝퍼 */}
+      <Card variant="outlined" sx={{ mb: 3, borderColor: tone.border }}>
+        <CardContent>
+          <Stepper activeStep={activeStep} alternativeLabel>
+            {steps.map((label) => (
+              <Step key={label}><StepLabel>{label}</StepLabel></Step>
+            ))}
+          </Stepper>
+        </CardContent>
+      </Card>
+
+      {/* 본문 */}
+      <AnimatePresence mode="wait">
+        {/* STEP 0 */}
+        {activeStep === 0 && (
+          <motion.div key="step-login" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Card variant="outlined" sx={{ borderColor: tone.border }}>
+                  <CardHeader avatar={<LoginIcon color="primary" />} title="1. 로그인" subheader="Google 또는 Kakao로 로그인하세요" />
+                  <CardContent>
+                    {loginStatus.logged_in ? (
+                      <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ mb: 2 }}>
+                        로그인됨 — 설문: <b>{loginStatus.has_survey_data ? "완료" : "미완료"}</b>, 투표: <b>{loginStatus.has_votes ? "완료" : "미완료"}</b>
+                      </Alert>
+                    ) : (
+                      <Alert icon={<ErrorIcon fontSize="inherit" />} severity="warning" sx={{ mb: 2 }}>
+                        로그인되어 있지 않습니다.
+                      </Alert>
+                    )}
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                      <Button startIcon={<GoogleIcon />} variant="contained" color="primary" onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}>Google 로그인</Button>
+                      <Button startIcon={<ChatBubbleIcon />} variant="outlined" color="primary" onClick={() => (window.location.href = KAKAO_LOGIN_URL)}>Kakao 로그인</Button>
+                    </Stack>
+                  </CardContent>
+                  <CardActions sx={{ justifyContent: "space-between" }}>
+                    <Stack direction="row" spacing={1}>
+                      <Button size="small" onClick={handleCheckLogin}>상태 새로고침</Button>
+                      {loginStatus.logged_in && <Button size="small" variant="contained" onClick={() => setActiveStep(1)}>다음으로</Button>}
+                    </Stack>
+                    <Button size="small" color="error" startIcon={<LogoutIcon />} onClick={handleLogout}>로그아웃</Button>
+                  </CardActions>
+                </Card>
+              </Grid>
+            </Grid>
+          </motion.div>
+        )}
+
+        {/* STEP 1 */}
+        {activeStep === 1 && (
+          <motion.div key="step-survey" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Card variant="outlined" sx={{ borderColor: tone.border }}>
+                  <CardHeader avatar={<ChecklistIcon color="primary" />} title="2. 관광 선호도 조사" subheader="중요하게 생각하는 요소를 선택해주세요" />
+                  <CardContent>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
+                        <FormControl fullWidth>
+                          <InputLabel>활동 유형</InputLabel>
+                          <Select label="활동 유형" value={activity} onChange={(e) => setActivity(e.target.value)}>
+                            <MenuItem value=""><em>선택</em></MenuItem>
+                            {["자연풍경", "자연산림", "관람및체험", "휴양", "테마거리", "예술감상", "공연관람", "트레킹"].map((v) => (<MenuItem key={v} value={v}>{v}</MenuItem>))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <FormControl fullWidth>
+                          <InputLabel>활동성</InputLabel>
+                          <Select label="활동성" value={activityLevel} onChange={(e) => setActivityLevel(e.target.value)}>
+                            <MenuItem value=""><em>선택</em></MenuItem>
+                            <MenuItem value="낮음">낮음</MenuItem>
+                            <MenuItem value="보통">보통</MenuItem>
+                            <MenuItem value="높음">높음</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <FormControl fullWidth>
+                          <InputLabel>시간대</InputLabel>
+                          <Select label="시간대" value={time} onChange={(e) => setTime(e.target.value)}>
+                            <MenuItem value=""><em>선택</em></MenuItem>
+                            {["오전","오후","저녁","밤"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <FormControl fullWidth>
+                          <InputLabel>계절</InputLabel>
+                          <Select label="계절" value={season} onChange={(e) => setSeason(e.target.value)}>
+                            <MenuItem value=""><em>선택</em></MenuItem>
+                            {["봄","여름","가을","겨울"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <FormControl fullWidth>
+                          <InputLabel>중요 요소</InputLabel>
+                          <Select label="중요 요소" value={preference} onChange={(e) => setPreference(e.target.value)}>
+                            <MenuItem value=""><em>선택</em></MenuItem>
+                            <MenuItem value="활동성">활동성</MenuItem>
+                            <MenuItem value="시간대">시간대</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                  <CardActions sx={{ justifyContent: "space-between" }}>
+                    <Button disabled={activeStep === 0} onClick={handleBack}>뒤로</Button>
+                    <Stack direction="row" spacing={1}>
+                      <Button onClick={handleSurveyStatus} startIcon={<PendingIcon />}>설문 상태</Button>
+                      <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>설문 제출</Button>
+                      <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
+                    </Stack>
+                  </CardActions>
+                </Card>
+              </Grid>
+            </Grid>
+          </motion.div>
+        )}
+
+        {/* STEP 2 */}
+        {activeStep === 2 && (
+          <motion.div key="step-vote" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Card variant="outlined" sx={{ borderColor: tone.border }}>
+                  <CardHeader avatar={<HowToVoteIcon color="primary" />} title="3. 투표 (라운드 선택)" subheader="추천된 두 장소 중 선호하는 곳을 라운드별로 선택하세요" />
+                  <CardActions sx={{ px: 2, pt: 0 }}>
+                    <Button onClick={handleSubmitVotes} variant="contained" startIcon={<HowToVoteIcon />}>투표 제출</Button>
+                  </CardActions>
+                  <CardContent>
+                    {!rounds.length ? (
+                      <Alert severity="info">추천을 준비하고 있어요… 잠시만요.</Alert>
+                    ) : (
+                      <>
+                        <Typography variant="h5" fontWeight={900} sx={{ mb: 2 }}>
+                          라운드 {currentRoundIdx + 1} / {rounds.length}
+                        </Typography>
+                        <Divider sx={{ mb: 3 }} />
+
+                        {(() => {
+                          const round = rounds[currentRoundIdx] || {};
+                          return (
+                            <Grid container spacing={3}>
+                              <Grid item xs={12} md={6}>
+                                <BigChoiceCard
+                                  label="Primary"
+                                  place={round?.primary}
+                                  selected={isSelected(currentRoundIdx, "primary", round?.primary?.name)}
+                                  onSelect={() => handleSelectAndAdvance(currentRoundIdx, "primary", round?.primary?.name || "Primary")}
+                                />
+                              </Grid>
+                              <Grid item xs={12} md={6}>
+                                <BigChoiceCard
+                                  label="Alternative"
+                                  place={round?.alternative}
+                                  selected={isSelected(currentRoundIdx, "alternative", round?.alternative?.name)}
+                                  onSelect={() => handleSelectAndAdvance(currentRoundIdx, "alternative", round?.alternative?.name || "Alternative")}
+                                />
+                              </Grid>
+                            </Grid>
+                          );
+                        })()}
+
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
+                          <Typography variant="body1" sx={{ opacity: 0.8 }}>
+                            현재 선택:{" "}
+                            {currentVotes[currentRoundIdx]?.choice
+                              ? `${currentVotes[currentRoundIdx].choice} · ${currentVotes[currentRoundIdx].item_name}`
+                              : "없음"}
+                          </Typography>
+                        </Stack>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </motion.div>
+        )}
+
+        {/* STEP 3 */}
+        {activeStep === 3 && (
+          <motion.div key="step-ml" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Card variant="outlined" sx={{ borderColor: tone.border }}>
+                  <CardHeader avatar={<ScienceIcon color="primary" />} title="4. ML 모델 추천 (20곳)" subheader="설문과 투표를 기반으로 추천" />
+                  <CardActions sx={{ px: 2, pt: 0 }}>
+                    <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>ML 추천 받기</Button>
+                    <Button variant="text" onClick={handleModelStatus}>모델 상태 확인</Button>
+                    <Box sx={{ flexGrow: 1 }} />
+                    <Button onClick={handleBack}>뒤로</Button>
+                    <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
+                  </CardActions>
+                  <CardContent sx={{ maxHeight: 420, overflow: "auto" }}>
+                    {!mlRecs.length ? (
+                      <Alert severity="info">아직 결과가 없습니다. “ML 추천 받기”를 눌러주세요.</Alert>
+                    ) : (
+                      <Stack spacing={1.5}>
+                        {mlRecs.map((p, i) => (
+                          <Box key={p._id || p.id || i} sx={{ p: 1.25, border: `1px solid ${tone.border}`, borderRadius: 1.5, bgcolor: tone.paper }}>
+                            <Typography variant="subtitle2" fontWeight={700}>{i + 1}. {p.name || "이름 없음"}</Typography>
+                            <Typography variant="body2">📍 {p.address || "-"}</Typography>
+                            <Typography variant="body2" sx={{ opacity: 0.75 }}>🏷️ {p.category || "-"}</Typography>
+                            <Typography variant="body2">⭐ 평점: {p.rating ?? "N/A"}</Typography>
+                            {!!(p.reason || p.explain || p.explanation) && (
+                              <Typography variant="body2" sx={{ mt: 0.5 }}>🧠 추천 이유: {p.reason || p.explain || p.explanation}</Typography>
+                            )}
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </CardContent>
+                  <CardActions sx={{ px: 2, pt: 0 }}>
+                    <Box sx={{ flexGrow: 1 }} />
+                    <Button variant="contained" onClick={goSpotRecommend}>관광지 고르러 가기</Button>
+                  </CardActions>
+                </Card>
+              </Grid>
+            </Grid>
+          </motion.div>
+        )}
+
+        {/* STEP 4 */}
+        {activeStep === 4 && (
+          <motion.div key="step-admin" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Card variant="outlined" sx={{ borderColor: tone.border }}>
+                  <CardHeader title="5. 관리 / 6. 테스트" />
+                  <CardActions sx={{ px: 2, pb: 2 }}>
+                    <Button color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll}>모든 데이터 초기화</Button>
+                    <Box sx={{ flexGrow: 1 }} />
+                    <Button variant="text" onClick={handleTestGet}>GET 테스트</Button>
+                    <Button variant="text" onClick={handleTestPost}>POST 테스트</Button>
+                    <Button onClick={handleBack}>뒤로</Button>
+                  </CardActions>
+                </Card>
+              </Grid>
+            </Grid>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+
+  // =======================
+  //  Mobile Layout (개선본)
+  // =======================
+  const MobileView = () => (
+    <>
+      {/* 상단 고정바 */}
+      <Paper
+        elevation={0}
+        sx={{
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          borderBottom: `1px solid ${tone.border}`,
+          background: `linear-gradient(120deg, ${tone.primarySoft}, #F8FFFE)`
+        }}
+      >
+        <Container maxWidth={false} disableGutters sx={{ py: 1.25, px: 1.25 }}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="h6" fontWeight={800} color={tone.primary} sx={{ flex: 1 }}>
+              WhereWeGo
+            </Typography>
+            <Chip size="small" color={loginStatus.logged_in ? "success" : "default"} label={loginStatus.logged_in ? "로그인됨" : "로그아웃"} />
+            {loading && <CircularProgress size={18} />}
+          </Stack>
+          <MobileStepper
+            variant="progress"
+            steps={steps.length}
+            position="static"
+            activeStep={activeStep}
+            backButton={<Button size="small" onClick={handleBack} disabled={activeStep === 0}><ArrowBack fontSize="small" />뒤로</Button>}
+            nextButton={<Button size="small" onClick={handleNext} disabled={!canGoNext || activeStep === steps.length - 1}>다음<ArrowForward fontSize="small" /></Button>}
+            sx={{ bgcolor: "transparent", px: 0, mt: 1 }}
+          />
+        </Container>
+      </Paper>
+
+      {/* 본문 */}
+      <Container maxWidth={false} disableGutters sx={{ py: 2, px: 1.25 }}>
+        <Box sx={{ "*": { fontSize: "1rem" } }}>
+          {/* STEP 0 */}
+          {activeStep === 0 && (
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader avatar={<LoginIcon color="primary" />} titleTypographyProps={{ variant: "h6", fontWeight: 800 }} title="1. 로그인" subheader="Google/Kakao 중 선택" />
+              <CardContent sx={{ pt: 0 }}>
+                {loginStatus.logged_in ? (
+                  <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ mb: 2 }}>
+                    로그인됨 — 설문 <b>{loginStatus.has_survey_data ? "완료" : "미완료"}</b> · 투표 <b>{loginStatus.has_votes ? "완료" : "미완료"}</b>
+                  </Alert>
+                ) : (
+                  <Alert icon={<ErrorIcon fontSize="inherit" />} severity="warning" sx={{ mb: 2 }}>
+                    로그인되어 있지 않습니다.
+                  </Alert>
+                )}
+                <Stack spacing={1}>
+                  <Button startIcon={<GoogleIcon />} variant="contained" onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}>Google 로그인</Button>
+                  <Button startIcon={<ChatBubbleIcon />} variant="outlined" onClick={() => (window.location.href = KAKAO_LOGIN_URL)}>Kakao 로그인</Button>
+                </Stack>
+              </CardContent>
+              <CardActions sx={{ justifyContent: "space-between" }}>
+                <Button size="small" onClick={handleCheckLogin}>상태 새로고침</Button>
+                <Button size="small" color="error" startIcon={<LogoutIcon />} onClick={handleLogout}>로그아웃</Button>
+              </CardActions>
+            </Card>
+          )}
+
+          {/* STEP 1 */}
+          {activeStep === 1 && (
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader avatar={<ChecklistIcon color="primary" />} titleTypographyProps={{ variant: "h6", fontWeight: 800 }} title="2. 선호도 조사" subheader="필수 항목을 선택" />
+              <CardContent sx={{ pt: 0 }}>
+                <Stack spacing={1.75}>
+                  <FormControl fullWidth>
+                    <InputLabel>활동 유형</InputLabel>
+                    <Select label="활동 유형" value={activity} onChange={(e) => setActivity(e.target.value)}>
+                      <MenuItem value=""><em>선택</em></MenuItem>
+                      {["자연풍경","자연산림","관람및체험","휴양","테마거리","예술감상","공연관람","트레킹"].map(v=>(<MenuItem key={v} value={v}>{v}</MenuItem>))}
+                    </Select>
+                  </FormControl>
+                  <FormControl fullWidth>
+                    <InputLabel>활동성</InputLabel>
+                    <Select label="활동성" value={activityLevel} onChange={(e) => setActivityLevel(e.target.value)}>
+                      <MenuItem value=""><em>선택</em></MenuItem>
+                      <MenuItem value="낮음">낮음</MenuItem><MenuItem value="보통">보통</MenuItem><MenuItem value="높음">높음</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControl fullWidth>
+                    <InputLabel>시간대</InputLabel>
+                    <Select label="시간대" value={time} onChange={(e) => setTime(e.target.value)}>
+                      <MenuItem value=""><em>선택</em></MenuItem>
+                      {["오전","오후","저녁","밤"].map(v=>(<MenuItem key={v} value={v}>{v}</MenuItem>))}
+                    </Select>
+                  </FormControl>
+                  <FormControl fullWidth>
+                    <InputLabel>계절</InputLabel>
+                    <Select label="계절" value={season} onChange={(e) => setSeason(e.target.value)}>
+                      <MenuItem value=""><em>선택</em></MenuItem>
+                      {["봄","여름","가을","겨울"].map(v=>(<MenuItem key={v} value={v}>{v}</MenuItem>))}
+                    </Select>
+                  </FormControl>
+                  <FormControl fullWidth>
+                    <InputLabel>중요 요소</InputLabel>
+                    <Select label="중요 요소" value={preference} onChange={(e) => setPreference(e.target.value)}>
+                      <MenuItem value=""><em>선택</em></MenuItem>
+                      <MenuItem value="활동성">활동성</MenuItem>
+                      <MenuItem value="시간대">시간대</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Stack>
+              </CardContent>
+              <CardActions sx={{ justifyContent: "flex-end" }}>
+                <Button onClick={handleSurveyStatus} startIcon={<PendingIcon />}>상태</Button>
+                <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>제출</Button>
+              </CardActions>
+            </Card>
+          )}
+
+          {/* STEP 2 */}
+          {activeStep === 2 && (
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader avatar={<HowToVoteIcon color="primary" />} titleTypographyProps={{ variant: "h6", fontWeight: 800 }} title={`3. 투표 · 라운드 ${currentRoundIdx + 1}/${rounds.length || 0}`} subheader="두 장소 중 하나를 선택" />
+              <CardContent sx={{ pt: 0 }}>
+                {!rounds.length ? (
+                  <Alert severity="info">추천을 준비하고 있어요…</Alert>
+                ) : (
+                  (() => {
+                    const round = rounds[currentRoundIdx] || {};
+                    return (
+                      <Stack spacing={1.25}>
+                        <BigChoiceCard
+                          compact
+                          label="Primary"
+                          place={round?.primary}
+                          selected={isSelected(currentRoundIdx, "primary", round?.primary?.name)}
+                          onSelect={() => handleSelectAndAdvance(currentRoundIdx, "primary", round?.primary?.name || "Primary")}
+                        />
+                        <BigChoiceCard
+                          compact
+                          label="Alternative"
+                          place={round?.alternative}
+                          selected={isSelected(currentRoundIdx, "alternative", round?.alternative?.name)}
+                          onSelect={() => handleSelectAndAdvance(currentRoundIdx, "alternative", round?.alternative?.name || "Alternative")}
+                        />
+                        <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                          현재 선택: {currentVotes[currentRoundIdx]?.choice ? `${currentVotes[currentRoundIdx].choice} · ${currentVotes[currentRoundIdx].item_name}` : "없음"}
+                        </Typography>
+                      </Stack>
+                    );
+                  })()
+                )}
+              </CardContent>
+
+              <CardActions sx={{ justifyContent: "space-between" }}>
+                <Button startIcon={<ArrowBack />} disabled={currentRoundIdx === 0} onClick={() => setCurrentRoundIdx((i) => Math.max(0, i - 1))}>이전 라운드</Button>
+                <Stack direction="row" spacing={1}>
+                  <Button variant="outlined" onClick={() => setCurrentRoundIdx((i) => Math.min((rounds.length - 1), i + 1))} disabled={currentRoundIdx >= rounds.length - 1}>다음 라운드</Button>
+                  <Button variant="contained" startIcon={<HowToVoteIcon />} onClick={handleSubmitVotes} disabled={!rounds.length}>투표 제출</Button>
+                </Stack>
+              </CardActions>
+            </Card>
+          )}
+
+          {/* STEP 3 */}
+          {activeStep === 3 && (
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader avatar={<ScienceIcon color="primary" />} titleTypographyProps={{ variant: "h6", fontWeight: 800 }} title="4. ML 추천 (20곳)" subheader="설문·투표 기반 추천" />
+              <CardActions sx={{ pt: 0, px: 2 }}>
+                <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>추천 받기</Button>
+                <Button variant="text" onClick={handleModelStatus}>모델 상태</Button>
+              </CardActions>
+              <CardContent sx={{ pt: 0 }}>
+                {!mlRecs.length ? (
+                  <Alert severity="info">아직 결과가 없습니다.</Alert>
+                ) : (
+                  <Stack spacing={1}>
+                    {mlRecs.map((p, i) => (
+                      <Card key={p._id || p.id || i} variant="outlined" sx={{ borderColor: tone.border }}>
+                        <CardContent sx={{ p: 1.25 }}>
+                          <Typography variant="subtitle2" fontWeight={800} noWrap>{i + 1}. {p.name || "이름 없음"}</Typography>
+                          <Typography variant="body2" noWrap>📍 {p.address || "-"}</Typography>
+                          <Typography variant="body2" sx={{ opacity: 0.75 }} noWrap>🏷️ {p.category || "-"}</Typography>
+                          <Typography variant="body2">⭐ {p.rating ?? "N/A"}</Typography>
+                          {!!(p.reason || p.explain || p.explanation) && (
+                            <Typography variant="caption" sx={{ mt: 0.25, display: "block" }}>🧠 {p.reason || p.explain || p.explanation}</Typography>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+              </CardContent>
+              <CardActions sx={{ justifyContent: "flex-end" }}>
+                <Button variant="contained" onClick={goSpotRecommend}>관광지 고르러 가기</Button>
+              </CardActions>
+            </Card>
+          )}
+
+          {/* STEP 4 */}
+          {activeStep === 4 && (
+            <Card variant="outlined" sx={{ borderColor: tone.border }}>
+              <CardHeader titleTypographyProps={{ variant: "h6", fontWeight: 800 }} title="5. 관리 / 6. 테스트" />
+              <CardActions sx={{ flexWrap: "wrap", gap: 1 }}>
+                <Button color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll}>모두 초기화</Button>
+                <Button variant="text" onClick={handleTestGet}>GET 테스트</Button>
+                <Button variant="text" onClick={handleTestPost}>POST 테스트</Button>
+              </CardActions>
+            </Card>
+          )}
+
+          {/* 하단 정보 */}
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
+            <Typography variant="caption" sx={{ opacity: 0.6 }}>
+              API: <MLink href={API_BASE} target="_blank" rel="noreferrer">{API_BASE}</MLink>
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.6 }}>쿠키 인증 사용</Typography>
+          </Stack>
+        </Box>
+      </Container>
+    </>
+  );
+
   // ---------- 렌더 ----------
   return (
-    <Box sx={{ bgcolor: tone.subtle, minHeight: "100vh", py: 6 }}>
-      <Container maxWidth="lg">
-        {/* 헤더 */}
-        <Card elevation={0} sx={{ mb: 4, border: `1px solid ${tone.border}`, background: `linear-gradient(120deg, ${tone.primarySoft}, #F0FDFA)` }}>
-          <CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-              <Box>
-                <Typography variant="h4" fontWeight={800} color={tone.primary}>🗺️ WhereWeGo 설문 시스템</Typography>
-                <Typography variant="body1" sx={{ opacity: 0.8, mt: 0.5 }}>JWT 토큰 기반 보안 설문·추천 테스트</Typography>
-              </Box>
-              <Stack direction="row" spacing={1}>
-                <Chip color={loginStatus.logged_in ? "success" : "default"} label={loginStatus.logged_in ? "로그인됨" : "로그아웃"} variant="filled" />
-                {loading && <CircularProgress size={24} />}
-              </Stack>
-            </Stack>
-          </CardContent>
-        </Card>
+    <Box sx={{ bgcolor: tone.subtle, minHeight: "100dvh", overflowX: "clip", width: "100%" }}>
+      {finalIsMobile ? (
+        <MobileView />
+      ) : (
+        <Container maxWidth="lg" sx={{ py: 6 }}>
+          <DesktopView />
+        </Container>
+      )}
 
-        {/* 스텝퍼 */}
-        <Card variant="outlined" sx={{ mb: 3, borderColor: tone.border }}>
-          <CardContent>
-            <Stepper activeStep={activeStep} alternativeLabel>
-              {steps.map((label) => (
-                <Step key={label}><StepLabel>{label}</StepLabel></Step>
-              ))}
-            </Stepper>
-          </CardContent>
-        </Card>
-
-        {/* 본문 */}
-        <AnimatePresence mode="wait">
-          {/* STEP 0: 로그인 */}
-          {activeStep === 0 && (
-            <motion.div key="step-login" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader avatar={<LoginIcon color="primary" />} title="1. 로그인" subheader="Google 또는 Kakao로 로그인하세요" />
-                    <CardContent>
-                      {loginStatus.logged_in ? (
-                        <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ mb: 2 }}>
-                          로그인됨 — 설문: <b>{loginStatus.has_survey_data ? "완료" : "미완료"}</b>, 투표: <b>{loginStatus.has_votes ? "완료" : "미완료"}</b>
-                        </Alert>
-                      ) : (
-                        <Alert icon={<ErrorIcon fontSize="inherit" />} severity="warning" sx={{ mb: 2 }}>
-                          로그인되어 있지 않습니다.
-                        </Alert>
-                      )}
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                        <Button startIcon={<GoogleIcon />} variant="contained" color="primary" onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}>Google 로그인</Button>
-                        <Button startIcon={<ChatBubbleIcon />} variant="outlined" color="primary" onClick={() => (window.location.href = KAKAO_LOGIN_URL)}>Kakao 로그인</Button>
-                      </Stack>
-                    </CardContent>
-                    <CardActions sx={{ justifyContent: "space-between" }}>
-                      <Stack direction="row" spacing={1}>
-                        <Button size="small" onClick={handleCheckLogin}>상태 새로고침</Button>
-                        {loginStatus.logged_in && <Button size="small" variant="contained" onClick={() => setActiveStep(1)}>다음으로</Button>}
-                      </Stack>
-                      <Button size="small" color="error" startIcon={<LogoutIcon />} onClick={handleLogout}>로그아웃</Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              </Grid>
-            </motion.div>
-          )}
-
-          {/* STEP 1: 설문 */}
-          {activeStep === 1 && (
-            <motion.div key="step-survey" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader avatar={<ChecklistIcon color="primary" />} title="2. 관광 선호도 조사" subheader="중요하게 생각하는 요소를 선택해주세요" />
-                    <CardContent>
-                      <Grid container spacing={2}>
-                        <Grid item xs={12} sm={6}>
-                          <FormControl fullWidth>
-                            <InputLabel>활동 유형</InputLabel>
-                            <Select label="활동 유형" value={activity} onChange={(e) => setActivity(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
-                              {["자연풍경", "자연산림", "관람및체험", "휴양", "테마거리", "예술감상", "공연관람", "트레킹"].map((v) => (
-                                <MenuItem key={v} value={v}>{v}</MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                          <FormControl fullWidth>
-                            <InputLabel>활동성</InputLabel>
-                            <Select label="활동성" value={activityLevel} onChange={(e) => setActivityLevel(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
-                              <MenuItem value="낮음">낮음</MenuItem>
-                              <MenuItem value="보통">보통</MenuItem>
-                              <MenuItem value="높음">높음</MenuItem>
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                          <FormControl fullWidth>
-                            <InputLabel>시간대</InputLabel>
-                            <Select label="시간대" value={time} onChange={(e) => setTime(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
-                              <MenuItem value="오전">오전</MenuItem>
-                              <MenuItem value="오후">오후</MenuItem>
-                              <MenuItem value="저녁">저녁</MenuItem>
-                              <MenuItem value="밤">밤</MenuItem>
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                          <FormControl fullWidth>
-                            <InputLabel>계절</InputLabel>
-                            <Select label="계절" value={season} onChange={(e) => setSeason(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
-                              <MenuItem value="봄">봄</MenuItem>
-                              <MenuItem value="여름">여름</MenuItem>
-                              <MenuItem value="가을">가을</MenuItem>
-                              <MenuItem value="겨울">겨울</MenuItem>
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        <Grid item xs={12}>
-                          <FormControl fullWidth>
-                            <InputLabel>중요 요소</InputLabel>
-                            <Select label="중요 요소" value={preference} onChange={(e) => setPreference(e.target.value)}>
-                              <MenuItem value=""><em>선택</em></MenuItem>
-                              <MenuItem value="활동성">활동성</MenuItem>
-                              <MenuItem value="시간대">시간대</MenuItem>
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                      </Grid>
-                    </CardContent>
-                    <CardActions sx={{ justifyContent: "space-between" }}>
-                      <Button disabled={activeStep === 0} onClick={handleBack}>뒤로</Button>
-                      <Stack direction="row" spacing={1}>
-                        <Button onClick={handleSurveyStatus} startIcon={<PendingIcon />}>설문 상태</Button>
-                        <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>설문 제출</Button>
-                        <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
-                      </Stack>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              </Grid>
-            </motion.div>
-          )}
-
-          {/* STEP 2: 투표 (이미지, 자동 다음 라운드) */}
-          {activeStep === 2 && (
-            <motion.div key="step-vote" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader avatar={<HowToVoteIcon color="primary" />} title="3. 투표 (라운드 선택)" subheader="추천된 두 장소 중 선호하는 곳을 라운드별로 선택하세요" />
-                    <CardActions sx={{ px: 2, pt: 0 }}>
-                      <Button onClick={handleSubmitVotes} variant="contained" startIcon={<HowToVoteIcon />}>
-                        투표 제출
-                      </Button>
-                    </CardActions>
-
-                    <CardContent>
-                      {!rounds.length ? (
-                        <Alert severity="info">추천을 준비하고 있어요… 잠시만요.</Alert>
-                      ) : (
-                        <>
-                          <Typography variant="h5" fontWeight={900} sx={{ mb: 2 }}>
-                            라운드 {currentRoundIdx + 1} / {rounds.length}
-                          </Typography>
-                          <Divider sx={{ mb: 3 }} />
-
-                          {(() => {
-                            const round = rounds[currentRoundIdx] || {};
-                            return (
-                              <Grid container spacing={3}>
-                                <Grid item xs={12} md={6}>
-                                  <BigChoiceCard
-                                    label="Primary"
-                                    place={round?.primary}
-                                    selected={isSelected(currentRoundIdx, "primary", round?.primary?.name)}
-                                    onSelect={() => handleSelectAndAdvance(currentRoundIdx, "primary", round?.primary?.name || "Primary")}
-                                  />
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                  <BigChoiceCard
-                                    label="Alternative"
-                                    place={round?.alternative}
-                                    selected={isSelected(currentRoundIdx, "alternative", round?.alternative?.name)}
-                                    onSelect={() => handleSelectAndAdvance(currentRoundIdx, "alternative", round?.alternative?.name || "Alternative")}
-                                  />
-                                </Grid>
-                              </Grid>
-                            );
-                          })()}
-
-                          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
-                            <Typography variant="body1" sx={{ opacity: 0.8 }}>
-                              현재 선택:{" "}
-                              {currentVotes[currentRoundIdx]?.choice
-                                ? `${currentVotes[currentRoundIdx].choice} · ${currentVotes[currentRoundIdx].item_name}`
-                                : "없음"}
-                            </Typography>
-                          </Stack>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
-            </motion.div>
-          )}
-
-          {/* STEP 3: ML */}
-          {activeStep === 3 && (
-            <motion.div key="step-ml" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader avatar={<ScienceIcon color="primary" />} title="4. ML 모델 추천 (20곳)" subheader="설문과 투표를 기반으로 추천" />
-                    <CardActions sx={{ px: 2, pt: 0 }}>
-                      <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>ML 추천 받기</Button>
-                      <Button variant="text" onClick={handleModelStatus}>모델 상태 확인</Button>
-                      <Box sx={{ flexGrow: 1 }} />
-                      <Button onClick={handleBack}>뒤로</Button>
-                      <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
-                    </CardActions>
-                    <CardContent sx={{ maxHeight: 420, overflow: "auto" }}>
-                      {!mlRecs.length ? (
-                        <Alert severity="info">아직 결과가 없습니다. “ML 추천 받기”를 눌러주세요.</Alert>
-                      ) : (
-                        <Stack spacing={1.5}>
-                          {mlRecs.map((p, i) => (
-                            <Box key={p._id || p.id || i} sx={{ p: 1.25, border: `1px solid ${tone.border}`, borderRadius: 1.5, bgcolor: tone.paper }}>
-                              <Typography variant="subtitle2" fontWeight={700}>{i + 1}. {p.name || "이름 없음"}</Typography>
-                              <Typography variant="body2">📍 {p.address || "-"}</Typography>
-                              <Typography variant="body2" sx={{ opacity: 0.75 }}>🏷️ {p.category || "-"}</Typography>
-                              <Typography variant="body2">⭐ 평점: {p.rating ?? "N/A"}</Typography>
-                              {!!(p.reason || p.explain || p.explanation) && (
-                                <Typography variant="body2" sx={{ mt: 0.5 }}>🧠 추천 이유: {p.reason || p.explain || p.explanation}</Typography>
-                              )}
-                            </Box>
-                          ))}
-                        </Stack>
-                      )}
-                    </CardContent>
-                    <CardActions sx={{ px: 2, pt: 0 }}>
-                      <Box sx={{ flexGrow: 1 }} />
-                      <Button variant="contained" onClick={goSpotRecommend}>관광지 고르러 가기</Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              </Grid>
-            </motion.div>
-          )}
-
-          {/* STEP 4: 관리 / 테스트 */}
-          {activeStep === 4 && (
-            <motion.div key="step-admin" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader title="5. 관리 / 6. 테스트" />
-                    <CardActions sx={{ px: 2, pb: 2 }}>
-                      <Button color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll}>모든 데이터 초기화</Button>
-                      <Box sx={{ flexGrow: 1 }} />
-                      <Button variant="text" onClick={handleTestGet}>GET 테스트</Button>
-                      <Button variant="text" onClick={handleTestPost}>POST 테스트</Button>
-                      <Button onClick={handleBack}>뒤로</Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              </Grid>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* 하단 */}
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 3 }}>
-          <Typography variant="caption" sx={{ opacity: 0.6 }}>
-            API Base: <MLink href={API_BASE} target="_blank" rel="noreferrer">{API_BASE}</MLink>
-          </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.6 }}>프론트는 쿠키 인증 사용 (credentials: include)</Typography>
-        </Stack>
-      </Container>
-
-      {/* 토스트 */}
+      {/* 공통 토스트 */}
       <Snackbar open={toast.open} autoHideDuration={5000} onClose={closeToast} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
         <Alert onClose={closeToast} severity={toast.severity} sx={{ width: "100%" }}>
           <span style={{ whiteSpace: "pre-line" }}>{toast.message}</span>

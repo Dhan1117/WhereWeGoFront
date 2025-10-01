@@ -20,7 +20,7 @@ import TravelPlanSamplePage from "./pages/TravelPlanSamplePage";
 import TouristSpotRecommendPage from "./pages/TouristSpotRecommendPage"; // 추가
 import { ItineraryProvider } from './contexts/ItineraryContext'; // 
 import DetailedSurveyPage from './pages/DetailedSurveyPage';
-
+import FixedLayout from "./Layouts/FixedLayout";
 const theme = createTheme({
   palette: {
     primary: {
@@ -59,6 +59,8 @@ function App() {
         <WishlistProvider>
           <ItineraryProvider> {/* ✅ 추가: 전역 일정 컨텍스트 */}
             <BrowserRouter>
+            <FixedLayout>
+
               <Header onSelectCategory={setSelectedCategoryForHeader} currentCategory={selectedCategoryForHeader} />
               <Toolbar sx={{ height: { xs: 64, sm: 80, md: 100 } }} />
               <Routes>
@@ -87,6 +89,7 @@ function App() {
                 <Route path="/tourist/:id" element={<TouristDetailPage />} />
                 <Route path="/busan-travel-plan" element={<TravelPlanPage />} /> {/* 코스 구성 페이지 */}
               </Routes>
+                </FixedLayout>
             </BrowserRouter>
           </ItineraryProvider>
         </WishlistProvider>
