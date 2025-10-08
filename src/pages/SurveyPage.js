@@ -25,7 +25,7 @@ import PlaceIcon from "@mui/icons-material/Place";
 import { Search as SearchIcon, ArrowBack, ArrowForward } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 
-// ✅ UA 기반 감지 추가
+// ✅ UA 기반 감지
 import { isMobile as isMobileUA, isAndroid, isIOS } from "react-device-detect";
 
 // ---------- 환경 변수 ----------
@@ -39,6 +39,9 @@ const API_BASE = `${API_PREFIX.replace(/\/$/, "")}/api/v1`;
 const GOOGLE_LOGIN_URL = `${API_BASE}/auth/google/login`;
 const KAKAO_LOGIN_URL = `${API_BASE}/auth/kakao/login`;
 const GMAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
+
+// ⛳ 로컬 관리자 우회 플래그 키
+const BYPASS_KEY = "wwg_admin_bypass";
 
 // ---------- 팔레트 ----------
 const tone = {
@@ -111,9 +114,9 @@ function extractPhotoUrl(place) {
 
 // ---------- 애니메이션 ----------
 const pageVariants = {
-  initial: { opacity: 0, y: 24, scale: 0.98 },
-  in: { opacity: 1, y: 0, scale: 1 },
-  out: { opacity: 0, y: -20, scale: 0.98 },
+  initial: { opacity: 0, y: 16 },
+  in: { opacity: 1, y: 0 },
+  out: { opacity: 0, y: -12 },
 };
 const pageTransition = { type: "spring", stiffness: 260, damping: 24 };
 
@@ -135,7 +138,7 @@ const DetailTooltipTitle = (p) => (
   </Box>
 );
 
-const BigChoiceCard = ({ label, place, selected, onSelect, compact = false }) => {
+function BigChoiceCardInner({ label, place, selected, onSelect, compact = false }) {
   const [src, setSrc] = useState("");
   const [imgLoaded, setImgLoaded] = useState(false);
   useEffect(() => {
@@ -183,14 +186,21 @@ const BigChoiceCard = ({ label, place, selected, onSelect, compact = false }) =>
               <Typography variant="body2" sx={{ opacity: 0.8 }} noWrap>🏷️ {place?.category || "-"} · ⭐ {place?.rating ?? "N/A"}</Typography>
             </Box>
             <Tooltip title={DetailTooltipTitle(place)} arrow placement="left" componentsProps={{ tooltip: { sx: { maxWidth: 320 } } }}>
-              <IconButton size="small" onClick={(e) => e.stopPropagation()} aria-label="상세보기">
+              <IconButton type="button" size="small" onClick={(e) => e.stopPropagation()} aria-label="상세보기">
                 <SearchIcon />
               </IconButton>
             </Tooltip>
           </Stack>
 
           <Box sx={{ mt: 1.25, borderRadius: 2.5, overflow: "hidden", bgcolor: "#eef2f7", position: "relative", aspectRatio: "16/9" }}>
-            {!imgLoaded && <Skeleton variant="rectangular" width="100%" height="100%" />}
+            {!imgLoaded && (
+              <Skeleton
+                variant="rectangular"
+                width="100%"
+                height="100%"
+                sx={{ position: "absolute", inset: 0 }}
+              />
+            )}
             <img
               src={src}
               alt={place?.name || "place"}
@@ -205,23 +215,27 @@ const BigChoiceCard = ({ label, place, selected, onSelect, compact = false }) =>
       </Card>
     </Badge>
   );
-};
+}
+
+const BigChoiceCard = React.memo(BigChoiceCardInner);
 
 // ---------- 메인 ----------
 export default function SurveyPage() {
   const navigate = useNavigate();
   const theme = useTheme();
 
-  // ✅ 화면폭 기반 감지
-  const isViewportMobile = useMediaQuery(theme.breakpoints.down("sm")); // <= 600px
-  // ✅ UA 기반 감지(실디바이스)
+  // ✅ 화면폭 기반 감지 (깜빡임 방지: noSsr)
+  const isViewportMobile = useMediaQuery(theme.breakpoints.down("sm"), { noSsr: true });
+  // ✅ UA 기반
   const isDeviceMobile = isMobileUA || isAndroid || isIOS;
-
   // ✅ 최종 모바일 판정 + URL 강제 스위치 (?m=1 / ?m=0)
-  const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-  let finalIsMobile = isDeviceMobile || isViewportMobile;
-  if (params.get("m") === "1") finalIsMobile = true;
-  if (params.get("m") === "0") finalIsMobile = false;
+  const finalIsMobile = useMemo(() => {
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    let v = isDeviceMobile || isViewportMobile;
+    if (params.get("m") === "1") v = true;
+    if (params.get("m") === "0") v = false;
+    return v;
+  }, [isViewportMobile, isDeviceMobile]);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -256,16 +270,60 @@ export default function SurveyPage() {
   const showToast = (message, severity = "info") => setToast({ open: true, message, severity });
   const closeToast = () => setToast((t) => ({ ...t, open: false }));
 
+  // 🔐 로컬 관리자 로그인(우회)
+  const adminBypassLogin = () => {
+    localStorage.setItem(BYPASS_KEY, "1");
+    const dummy = {
+      user_id: "dev-admin",
+      logged_in: true,
+      has_survey_data: false,
+      has_votes: false,
+      status: "bypass",
+    };
+    setLoginStatus(dummy);
+    setActiveStep(1);
+    showToast("관리자(로컬) 로그인 완료 — 백엔드 미사용", "success");
+  };
+
+  // 🚪 로그인 없이 바로 진행
+  const continueWithoutLogin = () => {
+    const guest = {
+      user_id: "guest",
+      logged_in: false,
+      has_survey_data: false,
+      has_votes: false,
+      status: "guest",
+    };
+    setLoginStatus(guest);
+    setActiveStep(1);
+    showToast("로그인 없이 진행합니다.", "info");
+  };
+
   // ---------- 1) 로그인 ----------
   const handleCheckLogin = async () => {
     setLoading(true);
     try {
+      if (localStorage.getItem(BYPASS_KEY) === "1") {
+        const dummy = {
+          user_id: "dev-admin",
+          logged_in: true,
+          has_survey_data: false,
+          has_votes: false,
+          status: "bypass",
+        };
+        setLoginStatus(dummy);
+        setActiveStep(1);
+        showToast("관리자(로컬) 로그인 유지 중", "success");
+        return;
+      }
+
       const resp = await apiCall(`${API_BASE}/survey/status`);
       setLoginStatus(resp);
       setActiveStep(resp.logged_in ? 1 : 0);
       showToast(resp.logged_in ? "로그인됨" : "로그인 필요", resp.logged_in ? "success" : "warning");
     } catch (e) {
       showToast(`로그인 상태 확인 실패: ${e.message}`, "error");
+      setActiveStep(0);
     } finally {
       setLoading(false);
     }
@@ -274,7 +332,10 @@ export default function SurveyPage() {
   const handleLogout = async () => {
     setLoading(true);
     try {
-      await apiCall(`${API_BASE}/auth/logout`, { method: "POST" });
+      localStorage.removeItem(BYPASS_KEY);
+      try {
+        await apiCall(`${API_BASE}/auth/logout`, { method: "POST" });
+      } catch {}
       setLoginStatus({ user_id: "", logged_in: false, has_survey_data: false, has_votes: false, status: "" });
       setActiveStep(0);
       showToast("로그아웃 완료", "success");
@@ -299,7 +360,8 @@ export default function SurveyPage() {
       await handleCheckLogin();
       setActiveStep(2);
     } catch (e) {
-      showToast(`설문 제출 실패: ${e.message}`, "error");
+      showToast(`설문 제출 실패(서버 없음 가능): ${e.message}\n다음 단계로 이동합니다.`, "warning");
+      setActiveStep(2);
     } finally {
       setLoading(false);
     }
@@ -328,7 +390,13 @@ export default function SurveyPage() {
       setCurrentVotes([]);
       showToast("장소 추천 완료", "success");
     } catch (e) {
-      showToast(`장소 추천 실패: ${e.message}`, "error");
+      const dummy = Array.from({ length: 5 }).map((_, i) => ({
+        primary: { name: `더미 장소 A${i + 1}`, address: "—", category: "—", rating: 4.2 },
+        alternative: { name: `더미 장소 B${i + 1}`, address: "—", category: "—", rating: 4.0 },
+      }));
+      setPlaceRecs(dummy);
+      setCurrentVotes([]);
+      showToast("추천 실패 — 더미 데이터를 사용합니다.", "warning");
     } finally {
       setLoading(false);
     }
@@ -347,16 +415,13 @@ export default function SurveyPage() {
     return v && v.choice === which && v.item_name === name;
   };
 
-  // 5라운드 제한 & 단일 라운드 화면
   const rounds = useMemo(() => (placeRecs || []).slice(0, 5), [placeRecs]);
   const [currentRoundIdx, setCurrentRoundIdx] = useState(0);
   useEffect(() => { setCurrentRoundIdx(0); }, [placeRecs]);
 
-  // 스텝2 진입 시 자동 추천 호출
   useEffect(() => {
     if (activeStep === 2 && (placeRecs?.length ?? 0) === 0) handlePlaceRecs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStep]);
+  }, [activeStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectAndAdvance = (roundIdx, which, name) => {
     selectVote(roundIdx, which, name);
@@ -376,7 +441,8 @@ export default function SurveyPage() {
       await handleCheckLogin();
       setActiveStep(3);
     } catch (e) {
-      showToast(`투표 제출 실패: ${e.message}`, "error");
+      showToast(`투표 제출 실패(서버 없음 가능): ${e.message}\n다음 단계로 이동합니다.`, "warning");
+      setActiveStep(3);
     } finally {
       setLoading(false);
     }
@@ -390,7 +456,12 @@ export default function SurveyPage() {
       setMlRecs(resp.recommendations || []);
       showToast("ML 추천 완료 (20곳)", "success");
     } catch (e) {
-      showToast(`ML 추천 실패: ${e.message}`, "error");
+      const dummy = Array.from({ length: 10 }).map((_, i) => ({
+        id: `dummy-${i + 1}`, name: `더미 추천 장소 ${i + 1}`, address: "—", category: "—", rating: 4.1,
+        reason: "서버 없이 임시로 표시되는 추천 예시",
+      }));
+      setMlRecs(dummy);
+      showToast("ML 추천 실패 — 더미 데이터를 사용합니다.", "warning");
     } finally {
       setLoading(false);
     }
@@ -419,7 +490,11 @@ export default function SurveyPage() {
       await handleCheckLogin();
       setActiveStep(loginStatus.logged_in ? 1 : 0);
     } catch (e) {
-      showToast(`초기화 실패: ${e.message}`, "error");
+      setPlaceRecs([]); setCurrentVotes([]); setMlRecs([]);
+      localStorage.removeItem(BYPASS_KEY);
+      setLoginStatus({ user_id: "", logged_in: false, has_survey_data: false, has_votes: false, status: "" });
+      setActiveStep(0);
+      showToast(`초기화(프론트) 완료 — 서버 오류: ${e.message}`, "warning");
     } finally {
       setLoading(false);
     }
@@ -483,7 +558,7 @@ export default function SurveyPage() {
   // ---------- 스텝 조절 ----------
   const canGoNext = useMemo(() => {
     switch (activeStep) {
-      case 0: return loginStatus.logged_in;
+      case 0: return loginStatus.logged_in || loginStatus.status === "bypass" || loginStatus.status === "guest";
       case 1: return [activity, activityLevel, time, season, preference].every(Boolean);
       case 2: return rounds.length > 0 && currentVotes.filter(Boolean).length === rounds.length;
       case 3: return mlRecs.length > 0;
@@ -495,7 +570,7 @@ export default function SurveyPage() {
   const handleBack = () => setActiveStep((s) => Math.max(s - 1, 0));
 
   // =======================
-  //  Desktop Layout (기존)
+  //  Desktop Layout
   // =======================
   const DesktopView = () => (
     <>
@@ -508,7 +583,7 @@ export default function SurveyPage() {
               <Typography variant="body1" sx={{ opacity: 0.8, mt: 0.5 }}>JWT 토큰 기반 보안 설문·추천 테스트</Typography>
             </Box>
             <Stack direction="row" spacing={1}>
-              <Chip color={loginStatus.logged_in ? "success" : "default"} label={loginStatus.logged_in ? "로그인됨" : "로그아웃"} variant="filled" />
+              <Chip color={loginStatus.logged_in || loginStatus.status === "bypass" ? "success" : "default"} label={(loginStatus.logged_in || loginStatus.status === "bypass") ? "로그인됨" : "로그아웃"} variant="filled" />
               {loading && <CircularProgress size={24} />}
             </Stack>
           </Stack>
@@ -527,16 +602,25 @@ export default function SurveyPage() {
       </Card>
 
       {/* 본문 */}
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="wait" initial={false}>
         {/* STEP 0 */}
         {activeStep === 0 && (
-          <motion.div key="step-login" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+          <motion.div
+            key="step-login"
+            variants={pageVariants}
+            initial={false}
+            animate="in"
+            exit="out"
+            transition={pageTransition}
+            presenceAffectsLayout={false}
+            layout
+          >
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                  <CardHeader avatar={<LoginIcon color="primary" />} title="1. 로그인" subheader="Google 또는 Kakao로 로그인하세요" />
+                  <CardHeader avatar={<LoginIcon color="primary" />} title="1. 로그인" subheader="Google / Kakao 또는 관리자(로컬) 로그인, 혹은 로그인 없이 진행" />
                   <CardContent>
-                    {loginStatus.logged_in ? (
+                    {(loginStatus.logged_in || loginStatus.status === "bypass") ? (
                       <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ mb: 2 }}>
                         로그인됨 — 설문: <b>{loginStatus.has_survey_data ? "완료" : "미완료"}</b>, 투표: <b>{loginStatus.has_votes ? "완료" : "미완료"}</b>
                       </Alert>
@@ -546,16 +630,18 @@ export default function SurveyPage() {
                       </Alert>
                     )}
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                      <Button startIcon={<GoogleIcon />} variant="contained" color="primary" onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}>Google 로그인</Button>
-                      <Button startIcon={<ChatBubbleIcon />} variant="outlined" color="primary" onClick={() => (window.location.href = KAKAO_LOGIN_URL)}>Kakao 로그인</Button>
+                      <Button type="button" startIcon={<GoogleIcon />} variant="contained" color="primary" onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}>Google 로그인</Button>
+                      <Button type="button" startIcon={<ChatBubbleIcon />} variant="outlined" color="primary" onClick={() => (window.location.href = KAKAO_LOGIN_URL)}>Kakao 로그인</Button>
+                      <Button type="button" variant="outlined" onClick={adminBypassLogin}>관리자 로그인(로컬)</Button>
+                      <Button type="button" variant="text" onClick={continueWithoutLogin}>로그인 없이 진행</Button>
                     </Stack>
                   </CardContent>
                   <CardActions sx={{ justifyContent: "space-between" }}>
                     <Stack direction="row" spacing={1}>
-                      <Button size="small" onClick={handleCheckLogin}>상태 새로고침</Button>
-                      {loginStatus.logged_in && <Button size="small" variant="contained" onClick={() => setActiveStep(1)}>다음으로</Button>}
+                      <Button type="button" size="small" onClick={handleCheckLogin}>상태 새로고침</Button>
+                      <Button type="button" size="small" variant="contained" onClick={() => setActiveStep(1)}>다음으로</Button>
                     </Stack>
-                    <Button size="small" color="error" startIcon={<LogoutIcon />} onClick={handleLogout}>로그아웃</Button>
+                    <Button type="button" size="small" color="error" startIcon={<LogoutIcon />} onClick={handleLogout}>로그아웃</Button>
                   </CardActions>
                 </Card>
               </Grid>
@@ -565,7 +651,7 @@ export default function SurveyPage() {
 
         {/* STEP 1 */}
         {activeStep === 1 && (
-          <motion.div key="step-survey" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+          <motion.div key="step-survey" variants={pageVariants} initial={false} animate="in" exit="out" transition={pageTransition} presenceAffectsLayout={false} layout>
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Card variant="outlined" sx={{ borderColor: tone.border }}>
@@ -597,7 +683,7 @@ export default function SurveyPage() {
                           <InputLabel>시간대</InputLabel>
                           <Select label="시간대" value={time} onChange={(e) => setTime(e.target.value)}>
                             <MenuItem value=""><em>선택</em></MenuItem>
-                            {["오전","오후","저녁","밤"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                            {["오전", "오후", "저녁", "밤"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
                           </Select>
                         </FormControl>
                       </Grid>
@@ -606,7 +692,7 @@ export default function SurveyPage() {
                           <InputLabel>계절</InputLabel>
                           <Select label="계절" value={season} onChange={(e) => setSeason(e.target.value)}>
                             <MenuItem value=""><em>선택</em></MenuItem>
-                            {["봄","여름","가을","겨울"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                            {["봄", "여름", "가을", "겨울"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
                           </Select>
                         </FormControl>
                       </Grid>
@@ -623,11 +709,11 @@ export default function SurveyPage() {
                     </Grid>
                   </CardContent>
                   <CardActions sx={{ justifyContent: "space-between" }}>
-                    <Button disabled={activeStep === 0} onClick={handleBack}>뒤로</Button>
+                    <Button type="button" disabled={activeStep === 0} onClick={handleBack}>뒤로</Button>
                     <Stack direction="row" spacing={1}>
-                      <Button onClick={handleSurveyStatus} startIcon={<PendingIcon />}>설문 상태</Button>
-                      <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>설문 제출</Button>
-                      <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
+                      <Button type="button" onClick={handleSurveyStatus} startIcon={<PendingIcon />}>설문 상태</Button>
+                      <Button type="button" onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>설문 제출</Button>
+                      <Button type="button" disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
                     </Stack>
                   </CardActions>
                 </Card>
@@ -638,13 +724,13 @@ export default function SurveyPage() {
 
         {/* STEP 2 */}
         {activeStep === 2 && (
-          <motion.div key="step-vote" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+          <motion.div key="step-vote" variants={pageVariants} initial={false} animate="in" exit="out" transition={pageTransition} presenceAffectsLayout={false} layout>
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Card variant="outlined" sx={{ borderColor: tone.border }}>
                   <CardHeader avatar={<HowToVoteIcon color="primary" />} title="3. 투표 (라운드 선택)" subheader="추천된 두 장소 중 선호하는 곳을 라운드별로 선택하세요" />
                   <CardActions sx={{ px: 2, pt: 0 }}>
-                    <Button onClick={handleSubmitVotes} variant="contained" startIcon={<HowToVoteIcon />}>투표 제출</Button>
+                    <Button type="button" onClick={handleSubmitVotes} variant="contained" startIcon={<HowToVoteIcon />}>투표 제출</Button>
                   </CardActions>
                   <CardContent>
                     {!rounds.length ? (
@@ -699,17 +785,17 @@ export default function SurveyPage() {
 
         {/* STEP 3 */}
         {activeStep === 3 && (
-          <motion.div key="step-ml" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+          <motion.div key="step-ml" variants={pageVariants} initial={false} animate="in" exit="out" transition={pageTransition} presenceAffectsLayout={false} layout>
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Card variant="outlined" sx={{ borderColor: tone.border }}>
                   <CardHeader avatar={<ScienceIcon color="primary" />} title="4. ML 모델 추천 (20곳)" subheader="설문과 투표를 기반으로 추천" />
                   <CardActions sx={{ px: 2, pt: 0 }}>
-                    <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>ML 추천 받기</Button>
-                    <Button variant="text" onClick={handleModelStatus}>모델 상태 확인</Button>
+                    <Button type="button" variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>ML 추천 받기</Button>
+                    <Button type="button" variant="text" onClick={handleModelStatus}>모델 상태 확인</Button>
                     <Box sx={{ flexGrow: 1 }} />
-                    <Button onClick={handleBack}>뒤로</Button>
-                    <Button disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
+                    <Button type="button" onClick={handleBack}>뒤로</Button>
+                    <Button type="button" disabled={!canGoNext} variant="outlined" onClick={handleNext}>다음</Button>
                   </CardActions>
                   <CardContent sx={{ maxHeight: 420, overflow: "auto" }}>
                     {!mlRecs.length ? (
@@ -732,7 +818,7 @@ export default function SurveyPage() {
                   </CardContent>
                   <CardActions sx={{ px: 2, pt: 0 }}>
                     <Box sx={{ flexGrow: 1 }} />
-                    <Button variant="contained" onClick={goSpotRecommend}>관광지 고르러 가기</Button>
+                    <Button type="button" variant="contained" onClick={goSpotRecommend}>관광지 고르러 가기</Button>
                   </CardActions>
                 </Card>
               </Grid>
@@ -742,17 +828,17 @@ export default function SurveyPage() {
 
         {/* STEP 4 */}
         {activeStep === 4 && (
-          <motion.div key="step-admin" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+          <motion.div key="step-admin" variants={pageVariants} initial={false} animate="in" exit="out" transition={pageTransition} presenceAffectsLayout={false} layout>
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Card variant="outlined" sx={{ borderColor: tone.border }}>
                   <CardHeader title="5. 관리 / 6. 테스트" />
                   <CardActions sx={{ px: 2, pb: 2 }}>
-                    <Button color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll}>모든 데이터 초기화</Button>
+                    <Button type="button" color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll}>모든 데이터 초기화</Button>
                     <Box sx={{ flexGrow: 1 }} />
-                    <Button variant="text" onClick={handleTestGet}>GET 테스트</Button>
-                    <Button variant="text" onClick={handleTestPost}>POST 테스트</Button>
-                    <Button onClick={handleBack}>뒤로</Button>
+                    <Button type="button" variant="text" onClick={handleTestGet}>GET 테스트</Button>
+                    <Button type="button" variant="text" onClick={handleTestPost}>POST 테스트</Button>
+                    <Button type="button" onClick={handleBack}>뒤로</Button>
                   </CardActions>
                 </Card>
               </Grid>
@@ -764,7 +850,7 @@ export default function SurveyPage() {
   );
 
   // =======================
-  //  Mobile Layout (개선본)
+  //  Mobile Layout
   // =======================
   const MobileView = () => (
     <>
@@ -784,7 +870,7 @@ export default function SurveyPage() {
             <Typography variant="h6" fontWeight={800} color={tone.primary} sx={{ flex: 1 }}>
               WhereWeGo
             </Typography>
-            <Chip size="small" color={loginStatus.logged_in ? "success" : "default"} label={loginStatus.logged_in ? "로그인됨" : "로그아웃"} />
+            <Chip size="small" color={(loginStatus.logged_in || loginStatus.status === "bypass") ? "success" : "default"} label={(loginStatus.logged_in || loginStatus.status === "bypass") ? "로그인됨" : "로그아웃"} />
             {loading && <CircularProgress size={18} />}
           </Stack>
           <MobileStepper
@@ -792,8 +878,8 @@ export default function SurveyPage() {
             steps={steps.length}
             position="static"
             activeStep={activeStep}
-            backButton={<Button size="small" onClick={handleBack} disabled={activeStep === 0}><ArrowBack fontSize="small" />뒤로</Button>}
-            nextButton={<Button size="small" onClick={handleNext} disabled={!canGoNext || activeStep === steps.length - 1}>다음<ArrowForward fontSize="small" /></Button>}
+            backButton={<Button type="button" size="small" onClick={handleBack} disabled={activeStep === 0}><ArrowBack fontSize="small" />뒤로</Button>}
+            nextButton={<Button type="button" size="small" onClick={handleNext} disabled={!canGoNext || activeStep === steps.length - 1}>다음<ArrowForward fontSize="small" /></Button>}
             sx={{ bgcolor: "transparent", px: 0, mt: 1 }}
           />
         </Container>
@@ -805,9 +891,9 @@ export default function SurveyPage() {
           {/* STEP 0 */}
           {activeStep === 0 && (
             <Card variant="outlined" sx={{ borderColor: tone.border }}>
-              <CardHeader avatar={<LoginIcon color="primary" />} titleTypographyProps={{ variant: "h6", fontWeight: 800 }} title="1. 로그인" subheader="Google/Kakao 중 선택" />
+              <CardHeader avatar={<LoginIcon color="primary" />} titleTypographyProps={{ variant: "h6", fontWeight: 800 }} title="1. 로그인" subheader="Google/Kakao, 관리자(로컬), 또는 로그인 없이 진행" />
               <CardContent sx={{ pt: 0 }}>
-                {loginStatus.logged_in ? (
+                {(loginStatus.logged_in || loginStatus.status === "bypass") ? (
                   <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success" sx={{ mb: 2 }}>
                     로그인됨 — 설문 <b>{loginStatus.has_survey_data ? "완료" : "미완료"}</b> · 투표 <b>{loginStatus.has_votes ? "완료" : "미완료"}</b>
                   </Alert>
@@ -817,13 +903,15 @@ export default function SurveyPage() {
                   </Alert>
                 )}
                 <Stack spacing={1}>
-                  <Button startIcon={<GoogleIcon />} variant="contained" onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}>Google 로그인</Button>
-                  <Button startIcon={<ChatBubbleIcon />} variant="outlined" onClick={() => (window.location.href = KAKAO_LOGIN_URL)}>Kakao 로그인</Button>
+                  <Button type="button" startIcon={<GoogleIcon />} variant="contained" onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}>Google 로그인</Button>
+                  <Button type="button" startIcon={<ChatBubbleIcon />} variant="outlined" onClick={() => (window.location.href = KAKAO_LOGIN_URL)}>Kakao 로그인</Button>
+                  <Button type="button" variant="outlined" onClick={adminBypassLogin}>관리자 로그인(로컬)</Button>
+                  <Button type="button" variant="text" onClick={continueWithoutLogin}>로그인 없이 진행</Button>
                 </Stack>
               </CardContent>
               <CardActions sx={{ justifyContent: "space-between" }}>
-                <Button size="small" onClick={handleCheckLogin}>상태 새로고침</Button>
-                <Button size="small" color="error" startIcon={<LogoutIcon />} onClick={handleLogout}>로그아웃</Button>
+                <Button type="button" size="small" onClick={handleCheckLogin}>상태 새로고침</Button>
+                <Button type="button" size="small" color="error" startIcon={<LogoutIcon />} onClick={handleLogout}>로그아웃</Button>
               </CardActions>
             </Card>
           )}
@@ -873,8 +961,8 @@ export default function SurveyPage() {
                 </Stack>
               </CardContent>
               <CardActions sx={{ justifyContent: "flex-end" }}>
-                <Button onClick={handleSurveyStatus} startIcon={<PendingIcon />}>상태</Button>
-                <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>제출</Button>
+                <Button type="button" onClick={handleSurveyStatus} startIcon={<PendingIcon />}>상태</Button>
+                <Button type="button" onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>제출</Button>
               </CardActions>
             </Card>
           )}
@@ -915,10 +1003,10 @@ export default function SurveyPage() {
               </CardContent>
 
               <CardActions sx={{ justifyContent: "space-between" }}>
-                <Button startIcon={<ArrowBack />} disabled={currentRoundIdx === 0} onClick={() => setCurrentRoundIdx((i) => Math.max(0, i - 1))}>이전 라운드</Button>
+                <Button type="button" startIcon={<ArrowBack />} disabled={currentRoundIdx === 0} onClick={() => setCurrentRoundIdx((i) => Math.max(0, i - 1))}>이전 라운드</Button>
                 <Stack direction="row" spacing={1}>
-                  <Button variant="outlined" onClick={() => setCurrentRoundIdx((i) => Math.min((rounds.length - 1), i + 1))} disabled={currentRoundIdx >= rounds.length - 1}>다음 라운드</Button>
-                  <Button variant="contained" startIcon={<HowToVoteIcon />} onClick={handleSubmitVotes} disabled={!rounds.length}>투표 제출</Button>
+                  <Button type="button" variant="outlined" onClick={() => setCurrentRoundIdx((i) => Math.min((rounds.length - 1), i + 1))} disabled={currentRoundIdx >= rounds.length - 1}>다음 라운드</Button>
+                  <Button type="button" variant="contained" startIcon={<HowToVoteIcon />} onClick={handleSubmitVotes} disabled={!rounds.length}>투표 제출</Button>
                 </Stack>
               </CardActions>
             </Card>
@@ -929,8 +1017,8 @@ export default function SurveyPage() {
             <Card variant="outlined" sx={{ borderColor: tone.border }}>
               <CardHeader avatar={<ScienceIcon color="primary" />} titleTypographyProps={{ variant: "h6", fontWeight: 800 }} title="4. ML 추천 (20곳)" subheader="설문·투표 기반 추천" />
               <CardActions sx={{ pt: 0, px: 2 }}>
-                <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>추천 받기</Button>
-                <Button variant="text" onClick={handleModelStatus}>모델 상태</Button>
+                <Button type="button" variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />}>추천 받기</Button>
+                <Button type="button" variant="text" onClick={handleModelStatus}>모델 상태</Button>
               </CardActions>
               <CardContent sx={{ pt: 0 }}>
                 {!mlRecs.length ? (
@@ -954,7 +1042,7 @@ export default function SurveyPage() {
                 )}
               </CardContent>
               <CardActions sx={{ justifyContent: "flex-end" }}>
-                <Button variant="contained" onClick={goSpotRecommend}>관광지 고르러 가기</Button>
+                <Button type="button" variant="contained" onClick={goSpotRecommend}>관광지 고르러 가기</Button>
               </CardActions>
             </Card>
           )}
@@ -964,9 +1052,9 @@ export default function SurveyPage() {
             <Card variant="outlined" sx={{ borderColor: tone.border }}>
               <CardHeader titleTypographyProps={{ variant: "h6", fontWeight: 800 }} title="5. 관리 / 6. 테스트" />
               <CardActions sx={{ flexWrap: "wrap", gap: 1 }}>
-                <Button color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll}>모두 초기화</Button>
-                <Button variant="text" onClick={handleTestGet}>GET 테스트</Button>
-                <Button variant="text" onClick={handleTestPost}>POST 테스트</Button>
+                <Button type="button" color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll}>모두 초기화</Button>
+                <Button type="button" variant="text" onClick={handleTestGet}>GET 테스트</Button>
+                <Button type="button" variant="text" onClick={handleTestPost}>POST 테스트</Button>
               </CardActions>
             </Card>
           )}

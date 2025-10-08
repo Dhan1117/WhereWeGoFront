@@ -318,11 +318,14 @@ const TouristSpotRecommendPage = () => {
   );
 
   const goMakeCourse = () => {
-    navigate("/travel-plan", {
-      state: { user_id: userId, spots: selectedSpots },
+    // ✅ 선택된 spot에는 id(=백엔드 ObjectId)와 name이 반드시 들어가야 함
+    const sanitized = selectedSpots
+      .filter(s => s?.id)              // id 없는 항목 제외
+      .map(s => ({ id: String(s.id), name: s.name, address: s.address, lat: s.lat, lng: s.lng }));
+    navigate("/travel-plan-kakao", {
+      state: { user_id: userId, spots: sanitized }
     });
   };
-
   return (
     <Box sx={{ maxWidth: 1440, margin: "0 auto", p: 3, pt: 20, display: "flex", gap: 3, alignItems: "flex-start" }}>
       {/* Left */}

@@ -2,16 +2,18 @@
 import React from "react";
 import { Box } from "@mui/material";
 
+const PAGE_WIDTH = 2560//원하는 고정 폭
+
 export default function FixedLayout({ children }) {
   return (
     <Box
       sx={{
-        width: "100%",        // 화면 폭에 맞춤
-        maxWidth: "1920px",   // 최대 해상도 제한 (예: FHD)
-        minWidth: "1024px",   // 너무 좁아지지 않도록 최소 폭
-        mx: "auto",
+        width: PAGE_WIDTH,
+        minWidth: PAGE_WIDTH,
+        maxWidth: PAGE_WIDTH,
+        mx: "auto",          // 화면 가운데 정렬
         minHeight: "100vh",
-        px: 0,
+        overflowX: "visible" // 가로 스크롤은 바깥 문서에서 처리
       }}
     >
       {children}
