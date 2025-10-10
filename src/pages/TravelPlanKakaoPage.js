@@ -15,7 +15,7 @@ import BeachAccessIcon from "@mui/icons-material/BeachAccess";
 import CloseIcon from "@mui/icons-material/Close";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 // ─────────────────────────────────────────────────────────────────────
 // ENV
@@ -131,9 +131,10 @@ async function ensureKakaoMaps(appkey) {
 // ─────────────────────────────────────────────────────────────────────
 export default function KakaoCourseTestPage() {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // 장소들 (DB에서 로드)
-  const [places, setPlaces] = useState([]); // [{id, name, category, icon, rating?}]
+  // 장소들 (DB or 전달받은 state에서 로드)
+  const [places, setPlaces] = useState([]); // [{id, name, category, icon, rating?, address?, lat?, lng?}]
   const [loadingPlaces, setLoadingPlaces] = useState(true);
   const [placesError, setPlacesError] = useState("");
 
@@ -169,21 +170,44 @@ export default function KakaoCourseTestPage() {
   // 지도 전체화면 토글
   const [mapFull, setMapFull] = useState(false);
 
-  // ── 초기 로딩: 장소 → 프리셋 → 카카오맵
+  // ── 초기 로딩: (1) 라우팅 state.spots 우선 → (2) DB → (3) 샘플 → (4) 카카오맵
   useEffect(() => {
     (async () => {
       try {
         setPlacesError("");
-        await loadPlacesFromDB();
+
+        // ① TouristSpotRecommendPage에서 넘어온 spots 사용
+        const incoming = Array.isArray(location.state?.spots) ? location.state.spots : [];
+        if (incoming.length) {
+          const mapped = incoming.map((s) => ({
+            id: s.id || s._id,
+            name: s.name || "이름 없음",
+            category: s.category || "관광지",
+            icon: iconFor(s) || "📍",
+            rating: typeof s.rating === "number" ? s.rating : 0,
+            address: s.address || "",
+            lat: s.lat,
+            lng: s.lng,
+          }));
+          const n2i = {};
+          mapped.forEach((p) => (n2i[p.name] = p.id));
+          setPlaces(mapped);
+          setNameToIdMap(n2i);
+          setupPresets(mapped);
+        } else {
+          // ② state가 없으면 DB에서 로딩
+          await loadPlacesFromDB();
+        }
       } catch (e) {
         console.error(e);
         setPlacesError(e?.message || "장소 로드 실패");
-        // Fallback: 샘플 ObjectId로 최소한의 목록 구성
+        // ③ Fallback: 샘플 ObjectId로 최소한의 목록 구성
         await loadPlacesBySampleIds();
       } finally {
         setLoadingPlaces(false);
       }
-      // 카카오맵 초기화
+
+      // ④ 카카오맵 초기화
       try {
         const kakao = await ensureKakaoMaps(KAKAO_APPKEY);
         setKakaoLoaded(true);
@@ -220,6 +244,9 @@ export default function KakaoCourseTestPage() {
       category: p.category_group || p.category || "기타",
       icon: iconFor(p),
       rating: p.rating || 0,
+      address: p.address || "",
+      lat: p.lat,
+      lng: p.lng,
     }));
     const n2i = {};
     mapped.forEach((p) => (n2i[p.name] = p.id));
@@ -245,6 +272,9 @@ export default function KakaoCourseTestPage() {
             category: p.category_group || "관광지",
             icon: iconFor(p),
             rating: p.rating || 0,
+            address: p.address || "",
+            lat: p.lat,
+            lng: p.lng,
           };
           tmp.push(obj);
           n2i[obj.name] = id;
@@ -640,9 +670,13 @@ export default function KakaoCourseTestPage() {
               </Stack>
             </Paper>
 
-            {/* 부산 주요 관광지 (이제 별도 스크롤 아님) */}
+            {/* 부산 주요 관광지 or 담아온 목록 */}
             <Box sx={{ mb: 2 }}>
-              <Typography fontWeight={700} sx={{ mb: 1 }}>🏛️ 부산 주요 관광지</Typography>
+              <Typography fontWeight={700} sx={{ mb: 1 }}>
+                🏛️ {Array.isArray(location.state?.spots) && location.state.spots.length
+                  ? "담아온 관광지 (클릭해서 선택)"
+                  : "부산 주요 관광지"}
+              </Typography>
               {loadingPlaces ? (
                 <Paper sx={{ p: 2, textAlign: "center" }}>
                   <CircularProgress size={22} sx={{ mr: 1 }} /> 불러오는 중...
