@@ -56,6 +56,53 @@ const SelectedCard = styled(Card)(({ theme }) => ({
 const isPlaceholder = (url) => !url || url.includes("/api/placeholder");
 const BUSAN_CENTER = { lat: 35.1796, lng: 129.0756 };
 
+const toNum = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const toMlPercent = (score) => {
+  if (score == null) return null;
+  const s = Number(score);
+  if (!Number.isFinite(s)) return null;
+  // 모델이 0~1 스코어면 %로 환산, 이미 % 단위(0~100)로 오면 캡핑
+  const pct = s <= 1 ? Math.round(s * 100) : Math.round(Math.min(s, 100));
+  // 0%는 UX상 숨김
+  return pct > 0 ? pct : null;
+};
+
+
+// ML 응답 한 항목을 공통 스키마로 정규화
+const normalizeMlSpot = (p, i = 0) => {
+  const id =
+    p.item_id ?? p.content_id ?? p.id ?? p._id ?? String(p.ml_index ?? i + 1);
+  return {
+    // ✅ 경로/위시/상세 등에서 공통으로 쓰는 핵심 필드
+    id: String(id),
+    name: p.item_name ?? p.name ?? "",
+    address: p.address ?? p.road_address ?? "",
+    lat: toNum(p.lat ?? p.latitude ?? p.y),     // 있으면 숫자로
+    lng: toNum(p.lng ?? p.longitude ?? p.x),    // 있으면 숫자로
+    // UI용 부가 필드
+    category: p.category ?? p.category_type ?? "",
+    rating: typeof p.rating === "number" ? p.rating : null,
+    image: p.photoUrl ?? p.image ?? "",
+    ml_score: typeof p.score === "number" ? p.score : null,
+    reason: p.reason ?? "",
+    source: "ml",
+  };
+};
+// ML 추천 타입 칩 메타 (category_type 기준)
+const ML_TYPE_META = {
+  top_3: { label: "설문+ML 상위", color: "secondary" },
+  ml_high: { label: "AI 추천", color: "primary" },
+  developer: { label: "개발자 추천", color: "success" },
+};
+const getMlTypeMeta = (spot) => {
+  const t = spot?.category_type || spot?.categoryType;
+  return ML_TYPE_META[t] || null;
+};
+
 // ML 점수/플래그 유틸
 const getMlScoreValue = (spot) => {
   const raw =
@@ -153,9 +200,27 @@ const TouristSpotRecommendPage = () => {
   const [wishSet, setWishSet] = useState(new Set()); // place_id Set
 
   // 초기 ML 20개 반영
+  // 초기 ML 20개 반영
   useEffect(() => {
-    setTouristSpots(initialAttractions);
-    setExpanded(initialAttractions.length > 0);
+    // item_id / _id / content_id / ml_index 등을 모두 id로 통일(문자열)
+    const normalized = (initialAttractions || []).map((s, idx) => ({
+      ...s,
+      id: String(s.id ?? s._id ?? s.item_id ?? s.content_id ?? s.ml_index ?? idx + 1),
+
+      //  category_type 보존 (칩 색상/라벨 구분용)
+      category_type: s.category_type ?? s.categoryType ?? null,
+
+      // 이름/좌표/이미지/점수도 최대한 보강(없으면 기존 값 유지)
+      name: s.item_name ?? s.name ?? "",
+      address: s.address ?? s.road_address ?? s.addr ?? "",
+      lat: toNum(s.lat ?? s.latitude ?? s.y),
+      lng: toNum(s.lng ?? s.longitude ?? s.x),
+      image: s.image ?? s.photoUrl ?? s.thumbnail ?? s.img ?? "",
+      ml_score: (typeof s.score === "number") ? s.score : (s.ml_score ?? null),
+    }));
+
+    setTouristSpots(normalized);
+    setExpanded(normalized.length > 0);
   }, [initialAttractions]);
 
   // 위시 상태
@@ -416,10 +481,11 @@ const TouristSpotRecommendPage = () => {
               const isSel = selectedSpots.some((s) => String(s.id) === id);
               const googlePhoto = photoMap[id];
               const finalImage = googlePhoto && !isPlaceholder(googlePhoto) ? googlePhoto : spot.image;
+              const mlScore = getMlScoreValue(spot);                // 원시 점수
+              const mlPct = toMlPercent(mlScore);                   // 0~1 → 퍼센트 환산, 0이면 null
+              const isDeveloper = (spot.category_type ?? spot.categoryType) === 'developer';
+              const showMlBadge = mlPct != null && !isDeveloper;    // 점수 있을 때만, 개발자 추천이면 숨김
 
-              const mlVal = getMlScoreValue(spot);
-              const mlText = formatMlScore(mlVal);
-              const showMl = fromMlList || isMlRecommended(spot);
               const showDev = isDevRecommended(spot);
 
               return (
@@ -444,19 +510,12 @@ const TouristSpotRecommendPage = () => {
                       )}
 
                       {/* ML 점수 - 좌상단 (유지) */}
-                      {showMl && (
+                      {showMlBadge && (
                         <Chip
-                          label={mlText ? `ML ${mlText}` : "ML"}
+                          label={`ML ${mlPct}%`}
                           size="small"
                           color="primary"
-                          sx={{
-                            position: "absolute",
-                            top: 8,
-                            left: 8,
-                            bgcolor: "rgba(99,102,241,0.95)",
-                            color: "#fff",
-                            fontWeight: 700,
-                          }}
+                          sx={{ position: "absolute", top: 8, left: 8, bgcolor: "rgba(99,102,241,0.95)", color: "#fff", fontWeight: 700 }}
                         />
                       )}
 
@@ -502,13 +561,48 @@ const TouristSpotRecommendPage = () => {
                       )}
 
                       {/* 추천 출처 Chip + 태그 */}
+                      {/* 추천 출처 Chip + 태그 (category_type 우선) */}
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 2 }}>
-                        {showMl && <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff" }} />}
-                        {showDev && <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff" }} />}
+                        {(() => {
+                          const meta = getMlTypeMeta(spot);
+                          if (meta) {
+                            // ✅ category_type 있으면 그 칩만 노출
+                            return (
+                              <Chip
+                                size="small"
+                                label={meta.label}
+                                color={meta.color}
+                                sx={{ color: "#fff" }}
+                              />
+                            );
+                          }
+                          // ✅ category_type 없으면 기존 로직 유지(ML/개발자 추천)
+                          return (
+                            <>
+                              {showMlBadge && (
+                                <Chip
+                                  size="small"
+                                  label="AI 추천"
+                                  color="primary"
+                                  sx={{ color: "#fff" }}
+                                />
+                              )}
+                              {showDev && (
+                                <Chip
+                                  size="small"
+                                  label="개발자 추천"
+                                  color="success"
+                                  sx={{ color: "#fff" }}
+                                />
+                              )}
+                            </>
+                          );
+                        })()}
                         {(spot.tags || []).slice(0, 3).map((tag, i) => (
                           <Chip key={i} label={tag} size="small" variant="outlined" />
                         ))}
                       </Box>
+
 
                       <Divider sx={{ my: 2 }} />
 

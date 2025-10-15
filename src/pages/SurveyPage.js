@@ -1,6 +1,9 @@
+/* global google */
+
 // src/pages/SurveyPage.jsx
 import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { Loader } from "@googlemaps/js-api-loader";
 import {
   Alert, Box, Button, Card, CardActions, CardContent, CardHeader,
   Chip, CircularProgress, Container, Divider, FormControl, Grid,
@@ -24,10 +27,13 @@ import PlaceIcon from "@mui/icons-material/Place";
 import { Search as SearchIcon, ArrowBack, ArrowForward } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 
+
 // ✅ UA 기반 감지
 import { isMobile as isMobileUA, isAndroid, isIOS } from "react-device-detect";
 
-// ---------- 환경 변수 ----------
+/* ==========================================================================
+   환경 변수 / 상수
+   ========================================================================== */
 const API_PREFIX =
   process.env.REACT_APP_API_PREFIX ||
   (typeof import.meta !== "undefined" &&
@@ -42,7 +48,9 @@ const GMAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 // ⛳ 로컬 관리자 우회 플래그 키 (프론트 데모용)
 const BYPASS_KEY = "wwg_admin_bypass";
 
-// ---------- 팔레트 ----------
+/* ==========================================================================
+   팔레트 / 스타일 토큰
+   ========================================================================== */
 const tone = {
   primary: "#4338CA",
   primarySoft: "#EEF2FF",
@@ -53,7 +61,110 @@ const tone = {
   cardGrad: "linear-gradient(135deg, #F9FAFB 0%, #EEF2FF 40%, #ECFEFF 100%)",
 };
 
-// ---------- 공용 유틸 ----------
+/* ==========================================================================
+   공용 유틸
+   ========================================================================== */
+// ML 추천 결과 → 공통 정규화 유틸
+const toNum = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+// ML 응답 한 항목을 공통 스키마로 정규화
+const normalizeMlSpot = (p, i = 0) => {
+  // 항상 MongoDB ObjectId인 item_id를 최우선 사용
+  const primaryId = p?.item_id || p?._id || p?.content_id || p?.id || p?.ml_index || (i + 1);
+  return {
+    // ↓ TouristSpotRecommendPage에서 공통적으로 쓰는 id를 확실히 채워줌
+    id: String(primaryId),
+    item_id: p?.item_id ? String(p.item_id) : undefined,
+    _id: p?._id ? String(p._id) : undefined,
+    name: p?.item_name || p?.name || "(이름 없음)",
+    category_type: p?.category_type ?? p?.categoryType ?? null,
+    address: p?.address || p?.road_address || "",
+    lat: toNum(p?.lat ?? p?.latitude ?? p?.y),
+    lng: toNum(p?.lng ?? p?.longitude ?? p?.x),
+    category: p?.category || p?.category_type || "",
+    rating: typeof p?.rating === "number" ? p.rating : null,
+    image:
+      p?.photoUrl ||
+      p?.image ||
+      (p?.photo_reference
+        ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${encodeURIComponent(
+          p.photo_reference
+        )}&key=${GMAPS_KEY}`
+        : PLACEHOLDER_URL),
+    ml_score: typeof p?.score === "number" ? p.score : null,
+    reason: p?.reason || "",
+    source: "ml",
+  };
+};
+// ✅ 라운드 추천(투표) 카드 이미지 보강
+async function augmentRoundImages(rounds) {
+  // Google Places 로더
+  const loader = new Loader({
+    apiKey: GMAPS_KEY,
+    libraries: ["places"],
+    region: "KR",
+    language: "ko",
+  });
+  await loader.load();
+
+  const mapDiv = document.createElement("div");
+  const service = new window.google.maps.places.PlacesService(mapDiv);
+  const BUSAN_CENTER = { lat: 35.1796, lng: 129.0756 };
+
+  // 원본 변형하지 않도록 복사
+  const next = rounds.map(r => ({
+    ...r,
+    primary: r.primary ? { ...r.primary } : null,
+    alternative: r.alternative ? { ...r.alternative } : null,
+  }));
+
+  // 내부 유틸: 이미지 없으면 채우기
+  const fillPhoto = async (spot) => {
+    if (!spot) return;
+    const already =
+      spot.image &&
+      !/^data:image/i.test(spot.image) &&
+      !/placeholder/i.test(spot.image);
+    if (already) return;
+
+    const q = (spot.name || "").trim();
+    if (!q) return;
+
+    const place = await new Promise((resolve) => {
+      service.textSearch(
+        {
+          query: `부산 ${q}`,
+          location: new window.google.maps.LatLng(BUSAN_CENTER.lat, BUSAN_CENTER.lng),
+        radius: 50000,
+          language: "ko",
+        },
+        (results) => resolve(Array.isArray(results) && results.length ? results[0] : null)
+      );
+    });
+    if (!place?.place_id) return;
+
+    const details = await new Promise((resolve) => {
+      service.getDetails(
+        { placeId: place.place_id, language: "ko", fields: ["photos"] },
+        (d) => resolve(d || null)
+      );
+    });
+
+    const url = details?.photos?.[0]?.getUrl({ maxWidth: 1200, maxHeight: 900 });
+    if (url) spot.image = url;
+  };
+
+  // 각 라운드의 양쪽 옵션 보강
+  for (const r of next) {
+    await fillPhoto(r.primary);
+    await fillPhoto(r.alternative);
+  }
+  return next;
+}
+
 async function apiCall(url, options = {}) {
   const body = options.body ? JSON.stringify(options.body) : undefined;
   const res = await fetch(url, {
@@ -72,7 +183,7 @@ async function apiCall(url, options = {}) {
     try {
       const err = await res.json();
       errDetail = err.detail || err.message || errDetail;
-    } catch {}
+    } catch { }
     throw new Error(errDetail);
   }
   try {
@@ -82,7 +193,9 @@ async function apiCall(url, options = {}) {
   }
 }
 
-// ---------- 이미지 헬퍼 ----------
+/* ==========================================================================
+   이미지 헬퍼
+   ========================================================================== */
 const PLACEHOLDER_SVG = `
 <svg xmlns='http://www.w3.org/2000/svg' width='1200' height='675' viewBox='0 0 1200 675'>
   <defs>
@@ -121,7 +234,9 @@ function extractPhotoUrl(place) {
   return "";
 }
 
-// ---------- 애니메이션 ----------
+/* ==========================================================================
+   애니메이션
+   ========================================================================== */
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
   in: { opacity: 1, y: 0 },
@@ -142,7 +257,9 @@ const selectedPulse = {
   transition: { duration: 1.25, repeat: Infinity, ease: "easeOut" },
 };
 
-// ---------- 공용 컴포넌트 ----------
+/* ==========================================================================
+   공용 컴포넌트
+   ========================================================================== */
 const DetailTooltipTitle = (p) => (
   <Box sx={{ p: 0.5 }}>
     <Typography variant="subtitle2" fontWeight={700}>{p?.name || "이름 없음"}</Typography>
@@ -246,6 +363,7 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
                   src={src}
                   alt={place?.name || "place"}
                   loading="lazy"
+                  referrerPolicy="no-referrer"
                   style={{ display: imgLoaded ? "block" : "none", width: "100%", height: "100%", objectFit: "cover" }}
                   onLoad={() => setImgLoaded(true)}
                   onError={(e) => { e.currentTarget.src = PLACEHOLDER_URL; setImgLoaded(true); }}
@@ -259,10 +377,11 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
     </Badge>
   );
 }
-
 const BigChoiceCard = React.memo(BigChoiceCardInner);
 
-// ---------- 메인 ----------
+/* ==========================================================================
+   메인 컴포넌트
+   ========================================================================== */
 export default function SurveyPage() {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -280,11 +399,9 @@ export default function SurveyPage() {
     return v;
   }, [isViewportMobile, isDeviceMobile]);
 
-  // UI state
+  /* ------------------ UI/상태 ------------------ */
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
-
-  // 진행 상태
   const [activeStep, setActiveStep] = useState(0);
 
   // 로그인/설문 상태
@@ -305,7 +422,8 @@ export default function SurveyPage() {
 
   // 추천/투표/ML
   const [placeRecs, setPlaceRecs] = useState([]);
-  const [currentVotes, setCurrentVotes] = useState([]); // [{ round_number, choice(option_a/b), item_name, item_index }]
+  // currentVotes[i] = { round, choice, item_name }
+  const [currentVotes, setCurrentVotes] = useState([]);
   const [mlRecs, setMlRecs] = useState([]);
 
   // 라운드 UX
@@ -318,7 +436,7 @@ export default function SurveyPage() {
   const showToast = (message, severity = "info") => setToast({ open: true, message, severity });
   const closeToast = () => setToast((t) => ({ ...t, open: false }));
 
-  // 🔐 로컬 관리자 로그인(우회) - 프론트 데모
+  /* ------------------ 로그인 ------------------ */
   const adminBypassLogin = () => {
     localStorage.setItem(BYPASS_KEY, "1");
     const dummy = {
@@ -332,40 +450,23 @@ export default function SurveyPage() {
     setActiveStep(1);
     showToast("관리자(로컬) 로그인 완료 — 백엔드 미사용", "success");
   };
-
-  // 🚪 로그인 없이 바로 진행(프론트 데모)
   const continueWithoutLogin = () => {
-    const guest = {
-      user_id: "guest",
-      logged_in: false,
-      has_survey_data: false,
-      has_votes: false,
-      status: "guest",
-    };
+    const guest = { user_id: "guest", logged_in: false, has_survey_data: false, has_votes: false, status: "guest" };
     setLoginStatus(guest);
     setActiveStep(1);
     showToast("로그인 없이 진행합니다.", "info");
   };
 
-  // ---------- 1) 로그인 ----------
-  // GET /api/v1/survey : 로그인 확인 (로그인 X → 빈 응답)
   const handleCheckLogin = async () => {
     setLoading(true);
     try {
       if (localStorage.getItem(BYPASS_KEY) === "1") {
-        const dummy = {
-          user_id: "dev-admin",
-          logged_in: true,
-          has_survey_data: false,
-          has_votes: false,
-          status: "bypass",
-        };
+        const dummy = { user_id: "dev-admin", logged_in: true, has_survey_data: false, has_votes: false, status: "bypass" };
         setLoginStatus(dummy);
         setActiveStep(1);
         showToast("관리자(로컬) 로그인 유지 중", "success");
         return;
       }
-
       const resp = await apiCall(`${API_BASE}/survey`);
       const loggedIn = !!(resp && (resp.logged_in || resp.user_id));
       setLoginStatus({
@@ -389,9 +490,7 @@ export default function SurveyPage() {
     setLoading(true);
     try {
       localStorage.removeItem(BYPASS_KEY);
-      try {
-        await apiCall(`${API_BASE}/auth/logout`, { method: "POST" });
-      } catch {}
+      try { await apiCall(`${API_BASE}/auth/logout`, { method: "POST" }); } catch { }
       setLoginStatus({ user_id: "", logged_in: false, has_survey_data: false, has_votes: false, status: "" });
       setActiveStep(0);
       showToast("로그아웃 완료", "success");
@@ -402,8 +501,7 @@ export default function SurveyPage() {
     }
   };
 
-  // ---------- 2) 설문 ----------
-  // POST /api/v1/survey/submit : activity_level은 "보통" → "중간" 매핑
+  /* ------------------ 설문 ------------------ */
   const handleSubmitSurvey = async () => {
     const surveyDataRaw = { activity, activity_level: activityLevel, time, season, preference };
     if (!Object.values(surveyDataRaw).every(Boolean)) {
@@ -425,7 +523,6 @@ export default function SurveyPage() {
     }
   };
 
-  // GET /api/v1/survey/data : 상세 상태 조회 (관리/테스트)
   const handleSurveyStatus = async () => {
     setLoading(true);
     try {
@@ -443,8 +540,7 @@ export default function SurveyPage() {
     }
   };
 
-  // ---------- 3) 추천/투표 ----------
-  // GET /api/v1/survey/place-recommendations
+  /* ------------------ 추천/투표 ------------------ */
   const handlePlaceRecs = async () => {
     setLoading(true);
     try {
@@ -454,7 +550,9 @@ export default function SurveyPage() {
         primary: r.option_a?.item || null,
         alternative: r.option_b?.item || null,
       }));
-      setPlaceRecs(mapped);
+      const withPhotos = await augmentRoundImages(mapped);
+      setPlaceRecs(withPhotos);
+      // 선택 초기화
       setCurrentVotes([]);
       setSelectedMessage("");
       setIsAdvancing(false);
@@ -469,21 +567,6 @@ export default function SurveyPage() {
     }
   };
 
-  const selectVote = (roundIndex, which, item) => {
-    // which: "primary" | "alternative" → 서버 choice: "option_a" | "option_b"
-    const choice = which === "primary" ? "option_a" : "option_b";
-    setCurrentVotes((prev) => {
-      const copy = [...prev];
-      copy[roundIndex] = {
-        round_number: roundIndex + 1,
-        choice,
-        item_name: item?.name,
-        item_index: item?.index,
-      };
-      return copy;
-    });
-  };
-
   const isSelected = (roundIdx, which, name) => {
     const v = currentVotes[roundIdx];
     const want = which === "primary" ? "option_a" : "option_b";
@@ -496,7 +579,21 @@ export default function SurveyPage() {
     if (activeStep === 2 && (placeRecs?.length ?? 0) === 0) handlePlaceRecs();
   }, [activeStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ✅ 선택 → 메시지 표시 → 2초 후 자동 이동
+  // 선택 저장 (백엔드 스펙: round / choice / item_name) — item_index 없음
+  const selectVote = (roundIndex, which, item) => {
+    const choice = which === "primary" ? "option_a" : "option_b";
+    setCurrentVotes((prev) => {
+      const copy = [...prev];
+      copy[roundIndex] = {
+        round: roundIndex + 1,     // ✅ round 필드 사용
+        choice,                    // "option_a" | "option_b"
+        item_name: item?.name || null,
+      };
+      return copy;
+    });
+  };
+
+  // 선택 → 메시지 표시 → 2초 후 자동 이동
   const handleSelectAndAdvance = (roundIdx, which, item) => {
     if (isAdvancing) return;
     selectVote(roundIdx, which, item);
@@ -513,16 +610,40 @@ export default function SurveyPage() {
     }, 2000);
   };
 
-  // POST /api/v1/survey/votes : 라운드별 개별 제출(스펙)
+  // ✅ 투표 전체 한 번에 전송
   const handleSubmitVotes = async () => {
-    if (!rounds?.length) { showToast("추천이 아직 준비되지 않았습니다.", "warning"); return; }
-    if (currentVotes.filter(Boolean).length < rounds.length) { showToast("모든 라운드에 투표해 주세요.", "warning"); return; }
+    if (!rounds?.length) {
+      showToast("추천이 아직 준비되지 않았습니다.", "warning");
+      return;
+    }
+    // 라운드별 누락 검사 (index 정렬 기준)
+    const missing = [];
+    for (let i = 0; i < rounds.length; i++) {
+      if (!currentVotes[i] || !currentVotes[i]?.choice || !currentVotes[i]?.item_name) {
+        missing.push(i + 1);
+      }
+    }
+    if (missing.length) {
+      showToast(`라운드 ${missing.join(", ")}의 선택 정보가 누락되었어요. 다시 선택해 주세요.`, "warning");
+      // 가장 작은 누락 라운드로 이동
+      const firstMissing = Math.min(...missing) - 1;
+      setCurrentRoundIdx(firstMissing);
+      return;
+    }
+
+    const payloadVotes = currentVotes
+      .slice(0, rounds.length)
+      .map((v, i) => ({ round: i + 1, choice: v.choice, item_name: v.item_name }));
+
     setLoading(true);
     try {
-      for (const v of currentVotes) {
-        await apiCall(`${API_BASE}/survey/votes`, { method: "POST", body: v });
-      }
-      showToast("투표 제출 완료", "success");
+      const resp = await apiCall(`${API_BASE}/survey/votes`, {
+        method: "POST",
+        body: { votes: payloadVotes },
+      });
+      showToast(resp?.message ? `투표 제출 완료: ${resp.message}` : "투표 제출 완료", "success");
+      // 상태 동기화(선택)
+      try { await handleCheckLogin(); } catch { }
       setActiveStep(3);
     } catch (e) {
       showToast(`투표 제출 실패: ${e.message}`, "error");
@@ -531,8 +652,8 @@ export default function SurveyPage() {
     }
   };
 
-  // ---------- 4) ML ----------
-  // GET /api/v1/survey/ml-recommendations?k=20&user_id=...
+  /* ------------------ ML ------------------ */
+  // ✅ ML 추천: 백엔드 응답을 normalizeMlSpot()으로 통일
   const handleMLRecs = async () => {
     setLoading(true);
     try {
@@ -542,9 +663,68 @@ export default function SurveyPage() {
         setLoading(false);
         return;
       }
-      const resp = await apiCall(`${API_BASE}/survey/ml-recommendations?user_id=${encodeURIComponent(uid)}&k=20`);
-      setMlRecs(resp?.recommendations || []);
-      showToast(resp?.message || "ML 추천 완료 (20곳)", "success");
+
+      const resp = await apiCall(
+        `${API_BASE}/survey/ml-recommendations?user_id=${encodeURIComponent(uid)}&k=20`
+      );
+
+      const raw = Array.isArray(resp?.recommendations) ? resp.recommendations : [];
+      const normalized = raw.map((p, i) => normalizeMlSpot(p, i));
+
+      // Google Places API 로드
+      const loader = new Loader({
+        apiKey: GMAPS_KEY,
+        libraries: ["places"],
+        region: "KR",
+        language: "ko",
+      });
+      await loader.load();
+
+      // eslint-disable-next-line no-undef
+      const mapDiv = document.createElement("div");
+      // eslint-disable-next-line no-undef
+      const service = new window.google.maps.places.PlacesService(mapDiv);
+      const BUSAN_CENTER = { lat: 35.1796, lng: 129.0756 };
+
+      for (const spot of normalized) {
+        const hasImage =
+          spot.image &&
+          !/^data:image/i.test(spot.image) &&
+          !/placeholder/i.test(spot.image);
+        if (hasImage) continue;
+
+        const query = (spot.name || "").trim();
+        if (!query) continue;
+
+        // eslint-disable-next-line no-undef
+        const place = await new Promise((resolve) => {
+          service.textSearch(
+            {
+              query: `부산 ${query}`,
+              // eslint-disable-next-line no-undef
+              location: new window.google.maps.LatLng(BUSAN_CENTER.lat, BUSAN_CENTER.lng),
+              radius: 50000,
+              language: "ko",
+            },
+            (results) => resolve(Array.isArray(results) && results.length ? results[0] : null)
+          );
+        });
+
+        if (!place?.place_id) continue;
+
+        const details = await new Promise((resolve) => {
+          service.getDetails(
+            { placeId: place.place_id, language: "ko", fields: ["photos"] },
+            (d) => resolve(d || null)
+          );
+        });
+
+        const url = details?.photos?.[0]?.getUrl({ maxWidth: 1200, maxHeight: 900 });
+        if (url) spot.image = url;
+      }
+
+      setMlRecs(normalized);
+      showToast(resp?.message || `ML 추천 완료 (${normalized.length}곳)`, "success");
     } catch (e) {
       showToast(`ML 추천 실패: ${e.message}`, "error");
     } finally {
@@ -552,32 +732,36 @@ export default function SurveyPage() {
     }
   };
 
-  // ---------- 6) spot-recommend로 이동 ----------
+  // 기존 goSpotRecommend 교체
   const goSpotRecommend = () => {
-    if (!mlRecs?.length) { showToast("먼저 ML 추천을 받아주세요.", "warning"); return; }
-    const attractions = mlRecs.map((p, i) => ({
-      id: p.item_id || p.content_id || p.ml_index || String(i + 1),
-      name: p.item_name,
-      address: p.address,
-      rating: p.rating,
-      category: p.category,
-      description: p.reason,
-      image: p.photoUrl || p.image || "",
-      ml_score: p.score ?? null,
-      source: p.category_type || "ml",
-      reason: p.reason || "",
-    }));
+    if (!mlRecs?.length) {
+      showToast("먼저 ML 추천을 받아주세요.", "warning");
+      return;
+    }
+
     navigate("/tourist-spot-recommend", {
       state: {
         user_id: loginStatus?.user_id || "",
-        attractions,
+        attractions: mlRecs.map((r, i) => ({
+          id: String(r.id || r.item_id || r._id || r.content_id || r.ml_index || i + 1),
+          name: r.name || r.item_name || "",          // ✅ name 확실히 전달 (제목 문제 해결)
+          address: r.address || "",
+          lat: r.lat,
+          lng: r.lng,
+          image: r.image || "",
+          category_type: r.category_type || null,     // ✅ top_3 | ml_high | developer
+          category: r.category || "",
+          score: typeof r.ml_score === "number" ? r.ml_score : r.score ?? null,
+          reason: r.reason || "",
+        })),
         isMlList: true,
         source: "ml",
       },
     });
+
   };
 
-  // ---------- 스텝 조절 ----------
+  /* ------------------ 스텝 조절 ------------------ */
   const canGoNext = useMemo(() => {
     switch (activeStep) {
       case 0: return loginStatus.logged_in || loginStatus.status === "bypass" || loginStatus.status === "guest";
@@ -591,9 +775,9 @@ export default function SurveyPage() {
   const handleNext = () => setActiveStep((s) => Math.min(s + 1, steps.length - 1));
   const handleBack = () => setActiveStep((s) => Math.max(s - 1, 0));
 
-  // =======================
-  //  Desktop Layout
-  // =======================
+  /* ======================================================================
+     Desktop Layout
+     ====================================================================== */
   const DesktopView = () => (
     <>
       {/* 헤더 */}
@@ -627,14 +811,7 @@ export default function SurveyPage() {
       <AnimatePresence mode="wait" initial={false}>
         {/* STEP 0 */}
         {activeStep === 0 && (
-          <motion.div
-            key="step-login"
-            variants={pageVariants}
-            initial="initial"
-            animate="in"
-            exit="out"
-            transition={pageTransition}
-          >
+          <motion.div key="step-login" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Card variant="outlined" sx={{ borderColor: tone.border }}>
@@ -733,7 +910,7 @@ export default function SurveyPage() {
                     <Stack direction="row" spacing={1}>
                       <Button type="button" onClick={handleSurveyStatus} startIcon={<PendingIcon />}>설문 상태</Button>
                       <Button type="button" onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>설문 제출</Button>
-                      <Button type="button" disabled={!canGoNext} variant="outlined" onClick={() => setActiveStep(2)}>다음</Button>
+                      <Button type="button" variant="outlined" onClick={() => setActiveStep(2)}>다음</Button>
                     </Stack>
                   </CardActions>
                 </Card>
@@ -742,7 +919,7 @@ export default function SurveyPage() {
           </motion.div>
         )}
 
-        {/* STEP 2 - 투표 (가로 2분할 고정, 더 큼/개성 디자인, 선택 메시지 2초 후 자동 이동) */}
+        {/* STEP 2 - 투표 (가로 2분할 고정, 선택 메시지 2초 후 자동 이동) */}
         {activeStep === 2 && (
           <motion.div key="step-vote" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
             <Grid container spacing={3}>
@@ -872,20 +1049,25 @@ export default function SurveyPage() {
                       <Stack spacing={1.5}>
                         {mlRecs.map((p, i) => (
                           <Box
-                            key={`${p.item_id || p.content_id || p.ml_index || "rec"}-${i}`}
+                            key={`${p.id || p.item_id || p.content_id || p.ml_index || "rec"}-${i}`}
                             sx={{ p: 1.25, border: `1px solid ${tone.border}`, borderRadius: 1.5, bgcolor: tone.paper }}
                           >
                             <Typography variant="subtitle2" fontWeight={700}>
-                              {i + 1}. {p.item_name || "이름 없음"}
+                              {i + 1}. {p.name || p.item_name || "(이름 없음)"}
                             </Typography>
                             <Typography variant="body2">🏷️ {p.category || "-"}</Typography>
-                            <Typography variant="body2">📊 점수: {p.score != null ? (typeof p.score === "number" ? p.score.toFixed(4) : p.score) : "N/A"}</Typography>
+                            <Typography variant="body2">
+                              📊 점수: {p.ml_score != null
+                                ? (typeof p.ml_score === "number" ? p.ml_score.toFixed(4) : p.ml_score)
+                                : "N/A"}
+                            </Typography>
                             {p.category_type && <Typography variant="body2">🧩 분류: {p.category_type}</Typography>}
                             {!!p.reason && (
                               <Typography variant="body2" sx={{ mt: 0.5 }}>🧠 추천 이유: {p.reason}</Typography>
                             )}
                           </Box>
                         ))}
+
                       </Stack>
                     )}
                   </CardContent>
@@ -920,9 +1102,9 @@ export default function SurveyPage() {
     </>
   );
 
-  // =======================
-  //  Mobile Layout (헤더·네비만 모바일 최적화, 라운드도 가로 2분할 유지)
-  // =======================
+  /* ======================================================================
+     Mobile Layout (투표도 좌/우 배치 유지: xs=6)
+     ====================================================================== */
   const MobileView = () => (
     <>
       {/* 상단 고정바 */}
@@ -958,13 +1140,12 @@ export default function SurveyPage() {
 
       {/* 본문 */}
       <Container maxWidth={false} disableGutters sx={{ py: 2, px: 1.25 }}>
-        {/* 데스크탑과 동일한 본문을 사용 (투표 섹션은 xs=6로 가로 2분할 유지) */}
         <DesktopView />
       </Container>
     </>
   );
 
-  // ---------- 렌더 ----------
+  /* ------------------ 렌더 ------------------ */
   return (
     <Box sx={{ bgcolor: tone.subtle, minHeight: "100dvh", overflowX: "clip", width: "100%" }}>
       {finalIsMobile ? (
