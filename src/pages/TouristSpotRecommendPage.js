@@ -1,11 +1,11 @@
-// src/pages/TouristSpotRecommendPage.jsx
+// src/pages/TouristSpotRecommendPage.jsx (responsive-merged)
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Box, Paper, Typography, Grid, Card, CardContent, CardMedia,
   Chip, Rating, Button, TextField, InputAdornment, Stack,
   Divider, IconButton, Alert, Skeleton, Accordion, AccordionSummary, AccordionDetails,
-  Tooltip
+  Tooltip, useTheme, useMediaQuery
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -65,33 +65,33 @@ const toMlPercent = (score) => {
   if (score == null) return null;
   const s = Number(score);
   if (!Number.isFinite(s)) return null;
-  // 모델이 0~1 스코어면 %로 환산, 이미 % 단위(0~100)로 오면 캡핑
   const pct = s <= 1 ? Math.round(s * 100) : Math.round(Math.min(s, 100));
-  // 0%는 UX상 숨김
-  return pct > 0 ? pct : null;
+  return pct > 0 ? pct : null; // 0%는 숨김
 };
-
 
 // ML 응답 한 항목을 공통 스키마로 정규화
 const normalizeMlSpot = (p, i = 0) => {
   const id =
     p.item_id ?? p.content_id ?? p.id ?? p._id ?? String(p.ml_index ?? i + 1);
   return {
-    // ✅ 경로/위시/상세 등에서 공통으로 쓰는 핵심 필드
     id: String(id),
     name: p.item_name ?? p.name ?? "",
     address: p.address ?? p.road_address ?? "",
-    lat: toNum(p.lat ?? p.latitude ?? p.y),     // 있으면 숫자로
-    lng: toNum(p.lng ?? p.longitude ?? p.x),    // 있으면 숫자로
-    // UI용 부가 필드
+    lat: toNum(p.lat ?? p.latitude ?? p.y),
+    lng: toNum(p.lng ?? p.longitude ?? p.x),
     category: p.category ?? p.category_type ?? "",
+    category_type: p.category_type ?? p.categoryType ?? null,
     rating: typeof p.rating === "number" ? p.rating : null,
     image: p.photoUrl ?? p.image ?? "",
-    ml_score: typeof p.score === "number" ? p.score : null,
+    ml_score: typeof p.score === "number" ? p.score : (p.ml_score ?? null),
     reason: p.reason ?? "",
-    source: "ml",
+    tags: p.tags ?? [],
+    source: p.source ?? p.origin ?? "ml",
+    reviews: p.reviews,
+    distance: p.distance,
   };
 };
+
 // ML 추천 타입 칩 메타 (category_type 기준)
 const ML_TYPE_META = {
   top_3: { label: "설문+ML 상위", color: "secondary" },
@@ -103,7 +103,7 @@ const getMlTypeMeta = (spot) => {
   return ML_TYPE_META[t] || null;
 };
 
-// ML 점수/플래그 유틸
+// ML 점수/플래그 유틸 (추가 사용)
 const getMlScoreValue = (spot) => {
   const raw =
     spot?.ml_score ?? spot?.mlScore ?? spot?.score ??
@@ -117,14 +117,6 @@ const formatMlScore = (num) => {
   if (num == null) return null;
   if (num >= 0 && num <= 1) return `${Math.round(num * 100)}%`;
   return num.toFixed(1);
-};
-const isMlRecommended = (spot) => {
-  const tags = (spot?.tags || []).map((t) => String(t).toLowerCase());
-  return Boolean(
-    getMlScoreValue(spot) != null ||
-    ["ml", "ai", "ml추천", "ai추천"].some((k) => tags.includes(k)) ||
-    spot?.source === "ml" || spot?.origin === "ml" || spot?.is_ml === true
-  );
 };
 const isDevRecommended = (spot) => {
   const tags = (spot?.tags || []).map((t) => String(t));
@@ -166,6 +158,11 @@ const categories = ["전체", "해변", "문화", "사찰", "시장", "자연", 
 const TouristSpotRecommendPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const theme = useTheme();
+
+  // 반응형 감지
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm')); // 600px 이하
+  const isTablet = useMediaQuery(theme.breakpoints.down('md')); // 900px 이하
 
   const userId = location.state?.user_id || location.state?.userId || "";
   const initialAttractions = Array.isArray(location.state?.attractions)
@@ -193,32 +190,15 @@ const TouristSpotRecommendPage = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("전체");
-  const [touristSpots, setTouristSpots] = useState(initialAttractions);
+  const [touristSpots, setTouristSpots] = useState([]);
   const [selectedSpots, setSelectedSpots] = useState([]);
   const [expanded, setExpanded] = useState(false);
   const [photoMap, setPhotoMap] = useState({});
   const [wishSet, setWishSet] = useState(new Set()); // place_id Set
 
-  // 초기 ML 20개 반영
-  // 초기 ML 20개 반영
+  // 초기 ML 20개 정규화 반영 (원본 로직 유지)
   useEffect(() => {
-    // item_id / _id / content_id / ml_index 등을 모두 id로 통일(문자열)
-    const normalized = (initialAttractions || []).map((s, idx) => ({
-      ...s,
-      id: String(s.id ?? s._id ?? s.item_id ?? s.content_id ?? s.ml_index ?? idx + 1),
-
-      //  category_type 보존 (칩 색상/라벨 구분용)
-      category_type: s.category_type ?? s.categoryType ?? null,
-
-      // 이름/좌표/이미지/점수도 최대한 보강(없으면 기존 값 유지)
-      name: s.item_name ?? s.name ?? "",
-      address: s.address ?? s.road_address ?? s.addr ?? "",
-      lat: toNum(s.lat ?? s.latitude ?? s.y),
-      lng: toNum(s.lng ?? s.longitude ?? s.x),
-      image: s.image ?? s.photoUrl ?? s.thumbnail ?? s.img ?? "",
-      ml_score: (typeof s.score === "number") ? s.score : (s.ml_score ?? null),
-    }));
-
+    const normalized = (initialAttractions || []).map((s, idx) => normalizeMlSpot(s, idx));
     setTouristSpots(normalized);
     setExpanded(normalized.length > 0);
   }, [initialAttractions]);
@@ -383,45 +363,140 @@ const TouristSpotRecommendPage = () => {
   );
 
   const goMakeCourse = () => {
-    // ✅ 선택된 spot에는 id(=백엔드 ObjectId)와 name이 반드시 들어가야 함
+    // ✅ 선택된 spot에는 id와 name이 반드시 들어가야 함 (원본 로직 유지: Kakao 버전)
     const sanitized = selectedSpots
-      .filter(s => s?.id)              // id 없는 항목 제외
+      .filter(s => s?.id)
       .map(s => ({ id: String(s.id), name: s.name, address: s.address, lat: s.lat, lng: s.lng }));
     navigate("/travel-plan-kakao", {
       state: { user_id: userId, spots: sanitized }
     });
   };
+
   return (
-    <Box sx={{ maxWidth: 1440, margin: "0 auto", p: 3, pt: 20, display: "flex", gap: 3, alignItems: "flex-start" }}>
+    <Box sx={{ 
+      // 반응형 웹 전용 설정 (모바일/태블릿: xs, sm)
+      width: { xs: '100%', md: '100%' },
+      maxWidth: { xs: '96vw', md: '100vw' },
+      margin: { xs: 0, md: "0 auto" }, 
+      p: { xs: 1, sm: 2, md: 3 }, 
+      pt: { xs: 9, sm: 12, md: 16, lg: 20 }, 
+      display: "flex", 
+      flexDirection: { xs: "column", lg: "row" },
+      gap: { xs: 1.5, sm: 2, md: 3 }, 
+      alignItems: "flex-start",
+      minHeight: { xs: '100vh', lg: 'auto' },
+      overflowX: { xs: 'hidden', md: 'hidden' },
+      overflowY: 'auto',
+      backgroundColor: '#fafafa',
+      position: 'relative',
+      boxSizing: 'border-box'
+    }}>
       {/* Left */}
-      <Box sx={{ flex: 3 }}>
-        <Paper sx={{ p: 3, mb: 3, borderRadius: 2, position: "relative" }}>
-          <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-            <AIIcon sx={{ fontSize: 32, color: "#6366F1", mr: 2 }} />
+      <Box sx={{ flex: { xs: 1, lg: 3 }, width: { xs: '100%', lg: 'auto' } }}>
+        <Paper sx={{ 
+          p: { xs: 1.5, sm: 2, md: 3 }, 
+          mb: { xs: 1.5, sm: 2, md: 3 }, 
+          borderRadius: { xs: 1.5, sm: 2 }, 
+          position: "relative" 
+        }}>
+          <Box sx={{ 
+            display: "flex", 
+            flexDirection: { xs: "column", sm: "row" }, 
+            alignItems: { xs: "flex-start", sm: "center" }, 
+            mb: { xs: 1.5, sm: 2 }, 
+            gap: { xs: 1.5, sm: 0 } 
+          }}>
+            <AIIcon sx={{ 
+              fontSize: { xs: 24, sm: 28, md: 32 }, 
+              color: "#6366F1", 
+              mr: { xs: 0, sm: 2 } 
+            }} />
             <Box sx={{ flex: 1 }}>
-              <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>AI 추천 관광지</Typography>
-              <Typography variant="body1" color="text.secondary">ML 결과로 받은 부산 관광지 20곳</Typography>
+              <Typography 
+                variant="h4" 
+                sx={{ 
+                  fontSize: { xs: "1.25rem", sm: "1.75rem", md: "2rem" }, 
+                  fontWeight: 600, 
+                  mb: { xs: 0.5, sm: 1 } 
+                }}
+              >
+                AI 추천 관광지
+              </Typography>
+              <Typography 
+                variant="body1" 
+                sx={{ 
+                  fontSize: { xs: "0.75rem", sm: "0.875rem", md: "1rem" },
+                  display: { xs: 'none', sm: 'block' }
+                }} 
+                color="text.secondary"
+              >
+                ML 결과로 받은 부산 관광지 20곳
+              </Typography>
             </Box>
-            <Button variant="outlined" startIcon={<RefreshIcon />} onClick={fetchRecommendations} disabled={loading}>
+            <Button 
+              variant="outlined" 
+              startIcon={<RefreshIcon sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }} />} 
+              onClick={fetchRecommendations} 
+              disabled={loading}
+              size={isMobile ? "small" : "medium"}
+              fullWidth={isMobile}
+              sx={{ 
+                fontSize: { xs: '0.75rem', sm: '0.875rem' }, 
+                py: { xs: 0.75, sm: 1 },
+                minWidth: { xs: '100%', sm: 'auto' }
+              }}
+            >
               새로고침
             </Button>
           </Box>
 
-          <AIChip icon={<AIIcon />} label={`AI 분석 완료 - ${touristSpots.length}곳`} sx={{ mb: 3 }} />
+          <AIChip 
+            icon={<AIIcon />} 
+            label={`AI 분석 완료 - ${touristSpots.length}곳`} 
+            sx={{ 
+              mb: { xs: 1.5, sm: 2, md: 3 }, 
+              fontSize: { xs: '0.7rem', sm: '0.8rem', md: '0.875rem' },
+              height: { xs: '24px', sm: '28px', md: '32px' }
+            }} 
+          />
 
           {/* Search */}
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
+          <Stack 
+            direction={{ xs: "column", sm: "row" }} 
+            spacing={{ xs: 1.5, sm: 2 }} 
+            sx={{ mb: { xs: 1.5, sm: 2, md: 3 } }}
+          >
             <TextField
               placeholder="관광지명 또는 태그로 검색..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon /></InputAdornment>) }}
-              sx={{ flex: 1 }}
+              size={isMobile ? "small" : "medium"}
+              InputProps={{ 
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }} />
+                  </InputAdornment>
+                ) 
+              }}
+              sx={{ 
+                flex: 1,
+                '& .MuiInputBase-input': {
+                  fontSize: { xs: '0.85rem', sm: '0.95rem', md: '1rem' }
+                }
+              }}
             />
           </Stack>
 
           {/* Filter */}
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+          <Stack 
+            direction="row" 
+            spacing={1} 
+            sx={{ 
+              flexWrap: "wrap", 
+              gap: { xs: 0.75, sm: 1 },
+              mb: { xs: 1, sm: 0 }
+            }}
+          >
             {categories.map((category) => (
               <Chip
                 key={category}
@@ -429,23 +504,39 @@ const TouristSpotRecommendPage = () => {
                 onClick={() => setSelectedCategory(category)}
                 variant={selectedCategory === category ? "filled" : "outlined"}
                 color={selectedCategory === category ? "primary" : "default"}
+                size={isMobile ? "small" : "medium"}
+                sx={{ 
+                  fontSize: { xs: '0.7rem', sm: '0.8rem', md: '0.875rem' }, 
+                  height: { xs: '24px', sm: '28px', md: '32px' },
+                  px: { xs: 1, sm: 1.5 }
+                }}
               />
             ))}
           </Stack>
 
-          {/* 🔔 단 하나의 느낌표(!) 아이콘 + 툴팁 (박스 우하단) */}
+          {/* 🔔 안내 툴팁 */}
           <Tooltip
             arrow
-            placement="left"
+            placement={isMobile ? "top" : "left"}
             title={
               <Box sx={{ lineHeight: 1.6 }}>
-                <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    fontWeight: 700, 
+                    mb: 0.5, 
+                    fontSize: { xs: '0.7rem', sm: '0.8rem', md: '0.875rem' } 
+                  }}
+                >
                   이 페이지 사용 팁
                 </Typography>
-                <Typography variant="body2">
+                <Typography 
+                  variant="body2" 
+                  sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem', md: '0.875rem' } }}
+                >
                   • 카드 이미지 좌상단의 <b>ML %</b>는 모델 점수예요.<br />
-                  • 태그 옆 <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff" }} /> /
-                  <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff", ml: .5 }} /> 배지도 함께 확인하세요.<br />
+                  • 태그 옆 <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff", fontSize: '0.6rem' }} /> /
+                  <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff", ml: .5, fontSize: '0.6rem' }} /> 배지도 함께 확인하세요.<br />
                   • 마음에 드는 곳은 <b>일정에 추가</b>로 담고, 우측 패널에서 <b>코스 짜기</b>로 이동!
                 </Typography>
               </Box>
@@ -455,41 +546,44 @@ const TouristSpotRecommendPage = () => {
               size="small"
               sx={{
                 position: "absolute",
-                bottom: 12,
-                right: 12,
+                bottom: { xs: 8, sm: 12 },
+                right: { xs: 8, sm: 12 },
                 bgcolor: "rgba(255,255,255,0.95)",
                 boxShadow: 1,
+                width: { xs: 28, sm: 32, md: 36 },
+                height: { xs: 28, sm: 32, md: 36 },
                 "&:hover": { bgcolor: "rgba(255,255,255,1)" }
               }}
               aria-label="도움말"
             >
-              <PriorityHighIcon fontSize="small" />
+              <PriorityHighIcon sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }} />
             </IconButton>
           </Tooltip>
         </Paper>
 
         {loading && (
-          <Grid container spacing={3}>
+          <Grid container spacing={{ xs: 1.5, sm: 2, md: 3 }}>
             {[...Array(4)].map((_, i) => (<SpotSkeleton key={i} />))}
           </Grid>
         )}
 
         {!loading && (
-          <Grid container spacing={3}>
+          <Grid container spacing={{ xs: 1.5, sm: 2, md: 3 }}>
             {filteredSpots.map((spot) => {
               const id = String(spot.id || spot._id);
               const isSel = selectedSpots.some((s) => String(s.id) === id);
               const googlePhoto = photoMap[id];
               const finalImage = googlePhoto && !isPlaceholder(googlePhoto) ? googlePhoto : spot.image;
-              const mlScore = getMlScoreValue(spot);                // 원시 점수
-              const mlPct = toMlPercent(mlScore);                   // 0~1 → 퍼센트 환산, 0이면 null
-              const isDeveloper = (spot.category_type ?? spot.categoryType) === 'developer';
-              const showMlBadge = mlPct != null && !isDeveloper;    // 점수 있을 때만, 개발자 추천이면 숨김
 
+              const mlScore = getMlScoreValue(spot);
+              const mlPct = toMlPercent(mlScore);
+              const isDeveloper = (spot.category_type ?? spot.categoryType) === 'developer';
+              const showMlBadge = (mlPct != null) && !isDeveloper; // 개발자 추천일 때는 ML 배지 숨김
+              const meta = getMlTypeMeta(spot); // category_type 우선
               const showDev = isDevRecommended(spot);
 
               return (
-                <Grid item xs={12} md={6} key={id}>
+                <Grid item xs={12} sm={6} md={6} lg={4} key={id}>
                   <StyledCard
                     sx={{
                       border: isSel ? "2px solid #6366F1" : "none",
@@ -497,7 +591,7 @@ const TouristSpotRecommendPage = () => {
                       backgroundColor: isSel ? "rgba(99, 102, 241, 0.06)" : "white",
                     }}
                   >
-                    <Box sx={{ position: "relative", height: 200 }}>
+                    <Box sx={{ position: "relative", height: { xs: 180, sm: 200, md: 220 } }}>
                       {finalImage && !isPlaceholder(finalImage) ? (
                         <CardMedia component="img" image={finalImage} alt={spot.name} sx={{ height: "100%", width: "100%", objectFit: "cover" }} />
                       ) : (
@@ -509,7 +603,7 @@ const TouristSpotRecommendPage = () => {
                         </CardMedia>
                       )}
 
-                      {/* ML 점수 - 좌상단 (유지) */}
+                      {/* ML 점수 - 좌상단 */}
                       {showMlBadge && (
                         <Chip
                           label={`ML ${mlPct}%`}
@@ -529,17 +623,32 @@ const TouristSpotRecommendPage = () => {
                       </IconButton>
                     </Box>
 
-                    <CardContent>
+                    <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
                       {/* 제목 */}
                       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>{spot.name}</Typography>
-                        <IconButton size="small"><ShareIcon fontSize="small" /></IconButton>
+                        <Typography 
+                          variant="h6" 
+                          sx={{ fontWeight: 600, fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
+                        >
+                          {spot.name}
+                        </Typography>
+                        <IconButton size="small">
+                          <ShareIcon sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }} />
+                        </IconButton>
                       </Box>
 
                       {/* 주소/거리 */}
                       <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-                        <LocationOnIcon fontSize="small" color="action" sx={{ mr: 0.5 }} />
-                        <Typography variant="body2" color="text.secondary">
+                        <LocationOnIcon 
+                          fontSize="small" 
+                          color="action" 
+                          sx={{ mr: 0.5, fontSize: { xs: '1rem', sm: '1.1rem' } }} 
+                        />
+                        <Typography 
+                          variant="body2" 
+                          color="text.secondary"
+                          sx={{ fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' } }}
+                        >
                           {(spot.address || "").split(" ").slice(0, 3).join(" ")}
                           {spot.distance ? ` · ${spot.distance}` : ""}
                         </Typography>
@@ -548,68 +657,70 @@ const TouristSpotRecommendPage = () => {
                       {/* 평점 */}
                       {typeof spot.rating === "number" && (
                         <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                          <Rating value={spot.rating} precision={0.1} size="small" readOnly />
-                          <Typography variant="body2" sx={{ ml: 1 }}>{spot.rating}</Typography>
+                          <Rating value={spot.rating} precision={0.1} size={isMobile ? "small" : "medium"} readOnly />
+                          <Typography variant="body2" sx={{ ml: 1, fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' } }}>{spot.rating}</Typography>
                         </Box>
                       )}
 
                       {/* 설명 */}
                       {spot.description && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
+                        <Typography 
+                          variant="body2" 
+                          color="text.secondary" 
+                          sx={{ 
+                            mb: 2, lineHeight: 1.6,
+                            fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' },
+                            display: { xs: '-webkit-box', sm: 'block' },
+                            WebkitLineClamp: { xs: 2, sm: 3 },
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden'
+                          }}
+                        >
                           {spot.description}
                         </Typography>
                       )}
 
                       {/* 추천 출처 Chip + 태그 */}
-                      {/* 추천 출처 Chip + 태그 (category_type 우선) */}
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 2 }}>
-                        {(() => {
-                          const meta = getMlTypeMeta(spot);
-                          if (meta) {
-                            // ✅ category_type 있으면 그 칩만 노출
-                            return (
-                              <Chip
-                                size="small"
-                                label={meta.label}
-                                color={meta.color}
-                                sx={{ color: "#fff" }}
-                              />
-                            );
-                          }
-                          // ✅ category_type 없으면 기존 로직 유지(ML/개발자 추천)
-                          return (
-                            <>
-                              {showMlBadge && (
-                                <Chip
-                                  size="small"
-                                  label="AI 추천"
-                                  color="primary"
-                                  sx={{ color: "#fff" }}
-                                />
-                              )}
-                              {showDev && (
-                                <Chip
-                                  size="small"
-                                  label="개발자 추천"
-                                  color="success"
-                                  sx={{ color: "#fff" }}
-                                />
-                              )}
-                            </>
-                          );
-                        })()}
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: { xs: 0.5, sm: 0.75 }, mb: 2 }}>
+                        {meta ? (
+                          <Chip size="small" label={meta.label} color={meta.color} sx={{ color: "#fff", fontSize: { xs: '0.65rem', sm: '0.75rem' }, height: { xs: '20px', sm: '24px' } }} />
+                        ) : (
+                          <>
+                            {showMlBadge && (
+                              <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff", fontSize: { xs: '0.65rem', sm: '0.75rem' }, height: { xs: '20px', sm: '24px' } }} />
+                            )}
+                            {isDevRecommended(spot) && (
+                              <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff", fontSize: { xs: '0.65rem', sm: '0.75rem' }, height: { xs: '20px', sm: '24px' } }} />
+                            )}
+                          </>
+                        )}
                         {(spot.tags || []).slice(0, 3).map((tag, i) => (
-                          <Chip key={i} label={tag} size="small" variant="outlined" />
+                          <Chip 
+                            key={i} 
+                            label={tag} 
+                            size="small" 
+                            variant="outlined"
+                            sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' }, height: { xs: '20px', sm: '24px' } }}
+                          />
                         ))}
                       </Box>
 
-
-                      <Divider sx={{ my: 2 }} />
+                      <Divider sx={{ my: { xs: 1.5, sm: 2 } }} />
 
                       {/* 하단 액션 */}
                       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <Chip label={spot.category || "미분류"} size="small" sx={{ backgroundColor: "#f0f0f0", color: "#666" }} />
-                        <Button variant="contained" size="small" onClick={() => addToSelectedSpots(spot)} disabled={isSel}>
+                        <Chip 
+                          label={spot.category || "미분류"} 
+                          size="small" 
+                          sx={{ backgroundColor: "#f0f0f0", color: "#666", fontSize: { xs: '0.7rem', sm: '0.75rem' }, height: { xs: '24px', sm: '28px' } }} 
+                        />
+                        <Button 
+                          variant="contained" 
+                          size={isMobile ? "small" : "medium"}
+                          onClick={() => addToSelectedSpots(spot)} 
+                          disabled={isSel}
+                          sx={{ fontSize: { xs: '0.7rem', sm: '0.8rem', md: '0.875rem' }, py: { xs: 0.5, sm: 0.75 }, px: { xs: 1, sm: 1.5 } }}
+                        >
                           {isSel ? "추가됨" : "일정에 추가"}
                         </Button>
                       </Box>
@@ -622,15 +733,27 @@ const TouristSpotRecommendPage = () => {
         )}
 
         {!loading && filteredSpots.length === 0 && touristSpots.length > 0 && (
-          <Paper sx={{ p: 4, textAlign: "center", mt: 3 }}>
-            <MuseumIcon sx={{ fontSize: 60, color: "#ccc", mb: 2 }} />
-            <Typography variant="h6" color="text.secondary">검색 결과가 없습니다</Typography>
-            <Typography variant="body2" color="text.secondary">다른 검색어나 카테고리를 선택해보세요</Typography>
+          <Paper sx={{ p: { xs: 2, sm: 3, md: 4 }, textAlign: "center", mt: { xs: 2, sm: 3 } }}>
+            <MuseumIcon sx={{ fontSize: { xs: 48, sm: 56, md: 60 }, color: "#ccc", mb: { xs: 1.5, sm: 2 } }} />
+            <Typography variant="h6" color="text.secondary" sx={{ fontSize: { xs: '1rem', sm: '1.15rem', md: '1.25rem' } }}>
+              검색 결과가 없습니다
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem', md: '0.95rem' } }}>
+              다른 검색어나 카테고리를 선택해보세요
+            </Typography>
           </Paper>
         )}
 
         {!loading && touristSpots.length === 0 && (
-          <Alert severity="error" action={<Button color="inherit" size="small" onClick={fetchRecommendations}>다시 시도</Button>}>
+          <Alert 
+            severity="error" 
+            action={
+              <Button color="inherit" size="small" onClick={fetchRecommendations} sx={{ fontSize: { xs: '0.7rem', sm: '0.8rem' } }}>
+                다시 시도
+              </Button>
+            }
+            sx={{ fontSize: { xs: '0.8rem', sm: '0.9rem', md: '1rem' } }}
+          >
             추천 데이터를 불러오지 못했습니다.
           </Alert>
         )}
@@ -642,46 +765,56 @@ const TouristSpotRecommendPage = () => {
         onChange={() => setExpanded((prev) => !prev)}
         disableGutters elevation={0}
         sx={{
-          width: 460, minWidth: 400,
+          width: { xs: '100%', lg: 460 }, 
+          minWidth: { xs: 'auto', lg: 400 },
           border: selectedSpots.length === 0 ? "none" : "1px solid #ddd",
           borderRadius: 2,
           backgroundColor: selectedSpots.length === 0 ? "transparent" : "#fafafa",
           boxShadow: "none",
           alignSelf: "flex-start",
-          position: "sticky", top: 80,
-          maxHeight: "calc(100vh - 100px)",
-          overflowY: "auto", zIndex: 10,
+          position: { xs: 'relative', lg: 'sticky' }, 
+          top: { xs: 0, lg: 80 },
+          maxHeight: { xs: 'none', lg: 'calc(100vh - 100px)' },
+          overflowY: { xs: 'visible', lg: 'auto' }, 
+          zIndex: 10,
         }}
       >
-        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 2, py: 1.5 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, width: "100%" }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, flex: 1 }}>
+        <AccordionSummary 
+          expandIcon={<ExpandMoreIcon sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />} 
+          sx={{ px: { xs: 1.5, sm: 2 }, py: { xs: 1.25, sm: 1.5 } }}
+        >
+          <Box sx={{ display: "flex", flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: { xs: 1, sm: 1 }, width: "100%" }}>
+            <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.15rem', md: '1.25rem' }, fontWeight: 700, flex: 1 }}>
               담은 관광지 ({selectedSpots.length})
             </Typography>
-            <Button
-              size="small"
-              variant="outlined"
-              color="error"
-              onClick={(e) => { e.stopPropagation(); clearSelected(); }}
-              disabled={selectedSpots.length === 0}
-            >
-              전체 비우기
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              onClick={(e) => { e.stopPropagation(); goMakeCourse(); }}
-              disabled={selectedSpots.length === 0}
-            >
-              코스 짜기
-            </Button>
+            <Box sx={{ display: 'flex', gap: { xs: 0.75, sm: 1 } }}>
+              <Button
+                size={isMobile ? "small" : "medium"}
+                variant="outlined"
+                color="error"
+                onClick={(e) => { e.stopPropagation(); clearSelected(); }}
+                disabled={selectedSpots.length === 0}
+                sx={{ flex: { xs: 1, sm: 'auto' }, fontSize: { xs: '0.7rem', sm: '0.8rem', md: '0.875rem' }, py: { xs: 0.5, sm: 0.75 } }}
+              >
+                전체 비우기
+              </Button>
+              <Button
+                size={isMobile ? "small" : "medium"}
+                variant="contained"
+                onClick={(e) => { e.stopPropagation(); goMakeCourse(); }}
+                disabled={selectedSpots.length === 0}
+                sx={{ flex: { xs: 1, sm: 'auto' }, fontSize: { xs: '0.7rem', sm: '0.8rem', md: '0.875rem' }, py: { xs: 0.5, sm: 0.75 } }}
+              >
+                코스 짜기
+              </Button>
+            </Box>
           </Box>
         </AccordionSummary>
 
-        <AccordionDetails sx={{ px: 2, pt: 0, pb: 2 }}>
+        <AccordionDetails sx={{ px: { xs: 1.5, sm: 2 }, pt: 0, pb: { xs: 1.5, sm: 2 } }}>
           {selectedSpots.length === 0 ? (
-            <Paper variant="outlined" sx={{ p: 2, textAlign: "center", borderRadius: 2 }}>
-              <Typography variant="body2" color="text.secondary">
+            <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 }, textAlign: "center", borderRadius: { xs: 1.5, sm: 2 } }}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem', md: '0.95rem' } }}>
                 마음에 드는 관광지를 <b>일정에 추가</b>해 보세요!
               </Typography>
             </Paper>
@@ -693,10 +826,10 @@ const TouristSpotRecommendPage = () => {
 
               return (
                 <SelectedCard key={id}>
-                  <CardContent sx={{ p: 1.5 }}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                  <CardContent sx={{ p: { xs: 1.25, sm: 1.5 } }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, sm: 1.5 } }}>
                       {/* 썸네일 */}
-                      <Box sx={{ width: 112, height: 84, borderRadius: 1.2, overflow: "hidden", flex: "0 0 auto", bgcolor: "#eef3ff", position: "relative" }}>
+                      <Box sx={{ width: { xs: 90, sm: 100, md: 112 }, height: { xs: 68, sm: 75, md: 84 }, borderRadius: 1.2, overflow: "hidden", flex: "0 0 auto", bgcolor: "#eef3ff", position: "relative" }}>
                         {finalImage && !isPlaceholder(finalImage) ? (
                           <CardMedia component="img" image={finalImage} alt={spot.name} sx={{ width: "100%", height: "100%", objectFit: "cover" }} />
                         ) : (
@@ -708,36 +841,34 @@ const TouristSpotRecommendPage = () => {
 
                       {/* 본문 */}
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 0.25 }}>
+                        <Box sx={{ display: "flex", alignItems: "flex-start", gap: { xs: 0.75, sm: 1 }, mb: 0.25, flexWrap: "wrap" }}>
                           <Typography
                             variant="subtitle1"
-                            sx={{
-                              fontWeight: 700, lineHeight: 1.2,
-                              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                              overflow: "hidden", wordBreak: "keep-all",
-                            }}
+                            sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: { xs: '0.85rem', sm: '0.95rem', md: '1rem' }, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "keep-all" }}
                             title={spot.name}
                           >
                             {spot.name}
                           </Typography>
-                          <Chip size="small" label={spot.category || "미분류"} sx={{ bgcolor: "#f2f2f2", color: "#666" }} />
+                          <Chip size="small" label={spot.category || "미분류"} sx={{ bgcolor: "#f2f2f2", color: "#666", fontSize: { xs: '0.65rem', sm: '0.7rem' }, height: { xs: '20px', sm: '24px' } }} />
                         </Box>
 
                         {typeof spot.rating === "number" && (
-                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
-                            <Rating value={spot.rating} precision={0.1} size="small" readOnly />
-                            <Typography variant="caption">{spot.rating}</Typography>
+                          <Stack direction="row" spacing={{ xs: 0.75, sm: 1 }} alignItems="center" sx={{ mt: 0.25 }}>
+                            <Rating value={spot.rating} precision={0.1} size="small" readOnly sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }} />
+                            <Typography variant="caption" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
+                              {spot.rating}
+                            </Typography>
                           </Stack>
                         )}
 
-                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: "block", wordBreak: "keep-all", whiteSpace: "normal" }} title={spot.address}>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: "block", wordBreak: "keep-all", whiteSpace: "normal", fontSize: { xs: '0.7rem', sm: '0.75rem' }, lineHeight: 1.3 }} title={spot.address}>
                           {spot.address}
                         </Typography>
                       </Box>
 
                       {/* 액션 */}
-                      <IconButton color="error" onClick={() => removeFromSelectedSpots(id)} size="small" sx={{ ml: 0.5 }} aria-label={`${spot.name} 제거`}>
-                        <DeleteIcon fontSize="small" />
+                      <IconButton color="error" onClick={() => removeFromSelectedSpots(id)} size="small" sx={{ ml: { xs: 0, sm: 0.5 }, width: { xs: 32, sm: 36 }, height: { xs: 32, sm: 36 } }} aria-label={`${spot.name} 제거`}>
+                        <DeleteIcon sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }} />
                       </IconButton>
                     </Box>
                   </CardContent>
@@ -752,7 +883,7 @@ const TouristSpotRecommendPage = () => {
       {/* PlacesService 더미 */}
       <div ref={placesDivRef} style={{ width: 0, height: 0, overflow: "hidden", position: "absolute" }} />
       {loadError && (
-        <Alert severity="error" sx={{ position: "fixed", bottom: 16, right: 16 }}>
+        <Alert severity="error" sx={{ position: "fixed", bottom: { xs: 12, sm: 16 }, right: { xs: 12, sm: 16 }, left: { xs: 12, sm: 'auto' }, maxWidth: { xs: 'calc(100vw - 24px)', sm: '400px' }, fontSize: { xs: '0.8rem', sm: '0.9rem', md: '1rem' } }}>
           Google Maps/Places 로딩 오류: API 키와 권한을 확인하세요.
         </Alert>
       )}

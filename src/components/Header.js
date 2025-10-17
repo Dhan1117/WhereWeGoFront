@@ -152,15 +152,21 @@ const Header = ({ onSelectCategory = () => {} }) => {
     return (
       <Box sx={{
         position: 'absolute',
-        top: '40px',
-        width: '600px',
+        top: { xs: '40px', sm: '42px' },
+        left: { xs: '50%', sm: '50%' }, // 항상 중앙으로 두고 transform 활용
+        transform: 'translateX(-50%)',
+        width: {
+        xs: '150px',
+        sm: 'min(600px, calc(100vw - 32px))', // 뷰포트 폭을 넘지 않게 제한
+        md: '600px'
+  },
         backgroundColor: '#fff',
         border: '1px solid #ccc',
         borderRadius: 1,
         boxShadow: 2,
         zIndex: 1000,
         color: '#000',
-        maxHeight: '400px',
+        maxHeight: { xs: '300px', sm: '400px' },
         overflowY: 'auto',
       }}>
         {recentSearches.length > 0 && (
@@ -217,19 +223,120 @@ const Header = ({ onSelectCategory = () => {} }) => {
 
   return (
     <>
-      <AppBar position="fixed" className="header" sx={{ backgroundColor: '#fff', color: '#000' }}>
-        <Toolbar className="header__toolbar" sx={{ height: '100px' }}>
-          <Box className="header__left" sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-            <IconButton edge="start" className="header__icon-button" onClick={toggleDrawer(true)} sx={{ color: '#000' }}>
-              <MenuIcon />
+      <AppBar 
+        position="fixed" 
+        className="header" 
+        sx={{ 
+          backgroundColor: '#fff', 
+          color: '#000',
+          width: '100%',        // 화면 전체 너비
+          left: 0,              // 왼쪽 끝에서 시작
+          right: 0,             // 오른쪽 끝까지
+          maxWidth: '100vw',    // 뷰포트 너비 초과 방지
+          boxSizing: 'border-box'  // 패딩 포함 계산
+        }}
+      >
+        <Toolbar 
+          className="header__toolbar" 
+          sx={{ 
+            height: { 
+              xs: '70px',   // 모바일: 70px
+              sm: '74px',   // 태블릿: 74px
+              md: '80px',   // 중형: 80px
+              lg: '100px'   // 데스크톱: 100px
+            },
+            minHeight: { xs: '70px', sm: '74px', md: '80px', lg: '100px' },
+            px: { xs: 1.5, sm: 2, md: 3 },
+            width: '100%',           // 툴바도 전체 너비
+            maxWidth: '100%',        // 최대 너비 제한
+            boxSizing: 'border-box'  // 패딩 포함 계산
+          }}
+        >
+          {/* 왼쪽 영역: 햄버거 메뉴 + 로고 */}
+          <Box 
+            className="header__left" 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              height: '100%',
+              gap: { xs: 0.5, sm: 1 },
+              flexShrink: 0,  // 왼쪽 영역이 줄어들지 않도록
+              zIndex: 2       // 검색창보다 위에
+            }}
+          >
+            <IconButton 
+              edge="start" 
+              className="header__icon-button" 
+              onClick={toggleDrawer(true)} 
+              sx={{ 
+                color: '#000',
+                p: { xs: 0.5, sm: 0.75, md: 1 }
+              }}
+            >
+              <MenuIcon sx={{ fontSize: { xs: '1.4rem', sm: '1.5rem', md: '1.6rem' } }} />
             </IconButton>
 
-            <Box onClick={() => navigate('/')} sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', ml: 1, height: '100%' }}>
-              <img src="/WhereWeGo.PNG" alt="Where We Go 로고" style={{ height: '80px', width: '120px', objectFit: 'contain' }} />
+            <Box 
+              onClick={() => navigate('/')} 
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                cursor: 'pointer', 
+                height: '100%',
+                width: { 
+                  xs: '70px',   // 모바일: 70px (줄임)
+                  sm: '90px',   // 태블릿: 90px
+                  md: '110px',  // 중형: 110px
+                  lg: '130px'   // 대형: 130px
+                },
+                flexShrink: 0  // 로고가 줄어들지 않도록
+              }}
+            >
+              <Box
+                component="img"
+                src="/WhereWeGo.PNG" 
+                alt="Where We Go 로고"
+                sx={{
+                  height: { 
+                    xs: '38px',   // 모바일: 38px (줄임)
+                    sm: '48px',   // 태블릿: 48px
+                    md: '65px',   // 중형: 65px
+                    lg: '80px'    // 대형: 80px
+                  },
+                  width: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain'
+                }}
+              />
             </Box>
           </Box>
 
-          <Box className="header__center" sx={{ flex: 1, display: 'flex', justifyContent: 'center', position: 'relative' }}>
+          {/* 중앙 영역: 검색창 */}
+          <Box 
+            className="header__center" 
+            sx={{ 
+              position: { xs: 'absolute', md: 'relative' },  // 모바일: 절대 위치
+              left: { xs: '50%', md: 'auto' },               // 모바일: 화면 중앙
+              transform: { xs: 'translateX(-50%)', md: 'none' },  // 모바일: 정확히 중앙
+              flex: { xs: 0, md: 1 },                        // 모바일: flex 제거, 중형 이상: flex 사용
+              display: 'flex',
+              justifyContent: 'center', 
+              px: { 
+                xs: 0,        // 모바일: 여백 없음
+                sm: 0,        // 태블릿: 여백 없음
+                md: 0.5,      // 중형: 최소 여백
+                lg: 1         // 대형: 최소 여백
+              },
+              mx: { 
+                xs: 0,        // 모바일: 마진 없음
+                sm: 0,        // 태블릿: 마진 없음
+                md: 0.5       // 중형 이상: 최소 마진
+              },
+              minWidth: 0,
+              overflow: 'visible',
+              zIndex: 1       // 다른 요소 위에 표시
+            }}
+          >
             <TextField
               placeholder="관광지를 검색해보세요"
               variant="outlined"
@@ -244,38 +351,112 @@ const Header = ({ onSelectCategory = () => {} }) => {
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <IconButton onClick={performSearch} sx={{ color: '#000' }}>
-                      <SearchIcon />
+                    <IconButton onClick={performSearch} sx={{ color: '#000', p: { xs: 0.3, sm: 0.4, md: 0.5 } }}>
+                      <SearchIcon sx={{ fontSize: { xs: '0.95rem', sm: '1rem', md: '1.1rem' } }} />
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
               sx={{
-                width: '300px',
+                width: { 
+                  xs: '150px',  // 모바일: 150px (30px 감소)
+                  sm: '170px',  // 태블릿: 170px (30px 감소)
+                  md: '220px',  // 중형: 220px (60px 감소)
+                  lg: '280px',  // 대형: 280px (70px 감소)
+                  xl: '320px'   // 초대형: 320px (80px 감소)
+                },
                 backgroundColor: '#fff',
                 borderRadius: 1,
                 '& .MuiOutlinedInput-root': {
+                  fontSize: { 
+                    xs: '0.75rem',    // 모바일: 작게
+                    sm: '0.85rem', 
+                    md: '1rem' 
+                  },
+                  height: { 
+                    xs: '36px',   // 모바일: 적당한 높이
+                    sm: '38px', 
+                    md: '40px' 
+                  },
                   '& fieldset': { borderColor: '#ccc' },
                   '&:hover fieldset': { borderColor: '#aaa' },
                   '&.Mui-focused fieldset': { borderColor: (theme) => theme.palette.primary.main },
                 },
-                '& .MuiInputBase-input': { color: '#000' }
+                '& .MuiInputBase-input': { 
+                  color: '#000',
+                  py: { xs: 0.4, sm: 0.6, md: 0.8 },
+                  px: { xs: 0.6, sm: 0.8, md: 1.2 }
+                }
               }}
             />
             {isDropdownOpen && renderSearchDropdown()}
           </Box>
 
-          <Box className="header__right">
-            <IconButton className="header__icon-button" sx={{ color: '#000' }}><PublicIcon /></IconButton>
-            <IconButton className="header__icon-button" onClick={() => navigate('/wishlist')} sx={{ color: '#000' }}><FavoriteBorderIcon /></IconButton>
+          {/* 오른쪽 영역: 아이콘들 */}
+          <Box 
+            className="header__right"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: { xs: 0.3, sm: 0.5, md: 1 },
+              flexShrink: 0,  // 오른쪽 아이콘이 줄어들지 않도록
+              ml: 'auto',     // 항상 오른쪽 정렬! (모바일/데스크톱 모두)
+              zIndex: 2       // 검색창보다 위에
+            }}
+          >
+            {/* 지구본 아이콘 - 태블릿 이상에서만 표시 */}
+            <IconButton 
+              className="header__icon-button" 
+              sx={{ 
+                color: '#000',
+                display: { xs: 'none', sm: 'inline-flex' }, // 태블릿 이상
+                p: { xs: 0.5, sm: 0.75, md: 1 }
+              }}
+            >
+              <PublicIcon sx={{ fontSize: { sm: '1.25rem', md: '1.4rem', lg: '1.5rem' } }} />
+            </IconButton>
+
+            {/* 찜 아이콘 */}
+            <IconButton 
+              className="header__icon-button" 
+              onClick={() => navigate('/wishlist')} 
+              sx={{ 
+                color: '#000',
+                p: { xs: 0.3, sm: 0.4, md: 0.6 }
+              }}
+            >
+              <FavoriteBorderIcon sx={{ fontSize: { xs: '1.2rem', sm: '1.3rem', md: '1.4rem', lg: '1.5rem' } }} />
+            </IconButton>
+
+            {/* 로그인/프로필 아이콘 */}
             {user ? (
-              <IconButton className="header__icon-button" sx={{ color: '#000' }} onClick={toggleDrawer(true)}>
-                <Avatar src={user.picture} alt={user.name} />
+              <IconButton 
+                className="header__icon-button" 
+                sx={{ 
+                  color: '#000',
+                  p: { xs: 0.2, sm: 0.3, md: 0.4 }
+                }} 
+                onClick={toggleDrawer(true)}
+              >
+                <Avatar 
+                  src={user.picture} 
+                  alt={user.name}
+                  sx={{
+                    width: { xs: 24, sm: 28, md: 32, lg: 36 },
+                    height: { xs: 24, sm: 28, md: 32, lg: 36 }
+                  }}
+                />
               </IconButton>
             ) : (
-              // 로그인 아이콘 클릭 시 사이드바 열어 로그인 선택
-              <IconButton className="header__icon-button" sx={{ color: '#000' }} onClick={toggleDrawer(true)}>
-                <PersonOutlineIcon />
+              <IconButton 
+                className="header__icon-button" 
+                sx={{ 
+                  color: '#000',
+                  p: { xs: 0.3, sm: 0.4, md: 0.6 }
+                }} 
+                onClick={toggleDrawer(true)}
+              >
+                <PersonOutlineIcon sx={{ fontSize: { xs: '1.2rem', sm: '1.3rem', md: '1.4rem', lg: '1.5rem' } }} />
               </IconButton>
             )}
           </Box>
@@ -352,3 +533,4 @@ const Header = ({ onSelectCategory = () => {} }) => {
 };
 
 export default Header;
+
