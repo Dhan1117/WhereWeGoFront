@@ -5,7 +5,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader } from "@googlemaps/js-api-loader";
 import {
-  Alert, Box, Button, Card, CardActions, CardContent, CardHeader,
+  Alert, Box, Button, ButtonGroup, Card, CardActions, CardContent, CardHeader,
   Chip, CircularProgress, Container, Divider, FormControl, Grid,
   IconButton, InputLabel, MenuItem, Select, Snackbar,
   Stack, Stepper, Step, StepLabel, Tooltip, Typography,
@@ -88,8 +88,8 @@ const normalizeMlSpot = (p, i = 0) => {
       p?.image ||
       (p?.photo_reference
         ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${encodeURIComponent(
-            p.photo_reference
-          )}&key=${GMAPS_KEY}`
+          p.photo_reference
+        )}&key=${GMAPS_KEY}`
         : PLACEHOLDER_URL),
     ml_score: typeof p?.score === "number" ? p.score : null,
     reason: p?.reason || "",
@@ -115,7 +115,7 @@ async function apiCall(url, options = {}) {
     try {
       const err = await res.json();
       errDetail = err.detail || err.message || errDetail;
-    } catch {}
+    } catch { }
     throw new Error(errDetail);
   }
   try {
@@ -504,7 +504,7 @@ export default function SurveyPage() {
     setLoading(true);
     try {
       localStorage.removeItem(BYPASS_KEY);
-      try { await apiCall(`${API_BASE}/auth/logout`, { method: "POST" }); } catch {}
+      try { await apiCall(`${API_BASE}/auth/logout`, { method: "POST" }); } catch { }
       setLoginStatus({ user_id: "", logged_in: false, has_survey_data: false, has_votes: false, status: "" });
       setActiveStep(0);
       showToast("로그아웃 완료", "success");
@@ -650,7 +650,7 @@ export default function SurveyPage() {
         body: { votes: payloadVotes },
       });
       showToast(resp?.message ? `투표 제출 완료: ${resp.message}` : "투표 제출 완료", "success");
-      try { await handleCheckLogin(); } catch {}
+      try { await handleCheckLogin(); } catch { }
       setActiveStep(3);
     } catch (e) {
       showToast(`투표 제출 실패: ${e.message}`, "error");
@@ -1092,19 +1092,40 @@ export default function SurveyPage() {
                           </FormControl>
                         </Grid>
                         <Grid item xs={12}>
-                          <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-                            <InputLabel>중요 요소</InputLabel>
-                            <Select
-                              label="중요 요소"
-                              value={preference}
-                              onChange={(e) => setPreference(e.target.value)}
+                          <Typography
+                            component="label"
+                            htmlFor="pref-toggle"
+                            sx={{ display: "block", mb: 0.75, fontWeight: 700, fontSize: { xs: "0.9rem", sm: "1rem" } }}
+                          >
+                            중요 요소
+                          </Typography>
+
+                          <ButtonGroup id="pref-toggle" fullWidth aria-label="중요 요소 선택">
+                            <Button
+                              onClick={() => setPreference("활동성")}
+                              variant={preference === "활동성" ? "contained" : "outlined"}
+                              color="primary"
+                              aria-pressed={preference === "활동성"}
+                              size={isMobile ? "small" : "medium"}
                               sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}
                             >
-                              <MenuItem value=""><em>선택</em></MenuItem>
-                              <MenuItem value="활동성" sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>활동성</MenuItem>
-                              <MenuItem value="시간대" sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>시간대</MenuItem>
-                            </Select>
-                          </FormControl>
+                              활동성
+                            </Button>
+                            <Button
+                              onClick={() => setPreference("시간대")}
+                              variant={preference === "시간대" ? "contained" : "outlined"}
+                              color="primary"
+                              aria-pressed={preference === "시간대"}
+                              size={isMobile ? "small" : "medium"}
+                              sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}
+                            >
+                              시간대
+                            </Button>
+                          </ButtonGroup>
+
+                          <Typography variant="caption" sx={{ display: "block", mt: 0.5, opacity: 0.7 }}>
+                            버튼을 눌러 둘 중 하나를 선택하세요.
+                          </Typography>
                         </Grid>
                       </Grid>
                     </CardContent>

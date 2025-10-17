@@ -1,4 +1,4 @@
-// src/pages/KakaoCourseTestPage.jsx
+// src/pages/KakaoCourseTestPage.jsx (with multi-day itinerary)
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Box, Paper, Typography, Stack, Button, Select, MenuItem,
@@ -15,6 +15,9 @@ import BeachAccessIcon from "@mui/icons-material/BeachAccess";
 import CloseIcon from "@mui/icons-material/Close";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import ReplayIcon from "@mui/icons-material/Replay";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import { useLocation, useNavigate } from "react-router-dom";
 
 // ─────────────────────────────────────────────────────────────────────
@@ -152,6 +155,10 @@ export default function KakaoCourseTestPage() {
   const [mode, setMode] = useState("transit");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // 🗓️ 다일차 일정 (신규)
+  // dayRecords: [{ day: 1, names: [...], ids: [...], route: {...} }]
+  const [dayRecords, setDayRecords] = useState([]);
+
   // Kakao map
   const [sdkError, setSdkError] = useState("");
   const [kakaoLoaded, setKakaoLoaded] = useState(false);
@@ -163,7 +170,7 @@ export default function KakaoCourseTestPage() {
   const polylinesRef = useRef([]);
   const overlaysRef = useRef([]);
 
-  // 경로 데이터
+  // 경로 데이터(현재 화면에 보이는 것)
   const [routeData, setRouteData] = useState(null);
   const [generating, setGenerating] = useState(false);
 
@@ -471,7 +478,7 @@ export default function KakaoCourseTestPage() {
     [clearMap]
   );
 
-  // ── 경로 생성
+  // ── 경로 생성 (+ 일정에 자동 추가)
   const generateRoute = async () => {
     try {
       if (selectedNames.length < 2) {
@@ -489,6 +496,18 @@ export default function KakaoCourseTestPage() {
       const data = await res.json();
       setRouteData(data);
       drawOnMap(data);
+
+      // ✅ N일차 자동 추가
+      setDayRecords((prev) => [
+        ...prev,
+        {
+          day: prev.length + 1,
+          names: [...selectedNames],
+          ids: placeIds,
+          route: data,
+          mode,
+        },
+      ]);
     } catch (e) {
       console.error(e);
       alert(`경로 생성 실패: ${e?.message || "unknown"}`);
@@ -578,6 +597,24 @@ export default function KakaoCourseTestPage() {
     () => (routeData?.segments || []).reduce((s, v) => s + (v.duration_minutes || 0), 0),
     [routeData]
   );
+
+  // 🗓️ 일정 조작: 보기/삭제/다시 그리기
+  const focusDayOnMap = (idx) => {
+    const rec = dayRecords[idx];
+    if (!rec) return;
+    setRouteData(rec.route);
+    drawOnMap(rec.route);
+  };
+  const deleteDay = (idx) => {
+    setDayRecords((prev) => prev.filter((_, i) => i !== idx).map((r, i) => ({ ...r, day: i + 1 })));
+  };
+  const reAddSelectionFromDay = (idx) => {
+    const rec = dayRecords[idx];
+    if (!rec) return;
+    setSelectedNames(rec.names);
+    setMode(rec.mode || "transit");
+  };
+  const clearAllDays = () => setDayRecords([]);
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
@@ -699,17 +736,59 @@ export default function KakaoCourseTestPage() {
                 onClick={generateRoute}
                 sx={{ mb: 1, py: 1.2 }}
               >
-                {generating ? "경로 생성 중…" : "🗺️ 경로 생성하기"}
+                {generating ? "경로 생성 중…" : "🗺️ 경로 생성하기 (자동으로 N일차에 추가)"}
               </Button>
               <Button fullWidth variant="outlined" startIcon={<RestartAltIcon />} onClick={clearSelection} sx={{ py: 1.2 }}>
                 🔄 선택 초기화
               </Button>
             </Box>
 
-            {/* 경로 정보 */}
+            {/* 🗓️ 누적 일정 */}
+            <Box sx={{ mb: 2 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                <Typography fontWeight={700}>🗓️ 내 일정 ({dayRecords.length}일차)</Typography>
+                <Button size="small" onClick={clearAllDays} disabled={!dayRecords.length} startIcon={<DeleteOutlineIcon />}>전체 삭제</Button>
+              </Stack>
+              {dayRecords.length === 0 ? (
+                <Paper sx={{ p: 2, color: "text.secondary" }}>
+                  아직 추가된 일정이 없습니다. 경로 생성 시 1일차부터 자동으로 쌓입니다.
+                </Paper>
+              ) : (
+                <Stack spacing={1}>
+                  {dayRecords.map((rec, idx) => (
+                    <Paper key={idx} sx={{ p: 1.25, borderLeft: "4px solid #667eea" }}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                        <Typography fontWeight={800}>{rec.day}일차</Typography>
+                        <Stack direction="row" spacing={1}>
+                          <IconButton size="small" title="이 일차 경로 지도에서 보기" onClick={() => focusDayOnMap(idx)}>
+                            <VisibilityIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" title="이 일차를 선택 목록으로 불러오기" onClick={() => reAddSelectionFromDay(idx)}>
+                            <ReplayIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" title="이 일차 삭제" onClick={() => deleteDay(idx)}>
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                      </Stack>
+                      <Typography variant="body2" sx={{ mb: 0.5 }}>
+                        {rec.names.map((n, i) => `${i + 1}. ${n}`).join("  ·  ")}
+                      </Typography>
+                      {Array.isArray(rec.route?.segments) && (
+                        <Typography variant="caption" color="text.secondary">
+                          총 {rec.route.segments.length}구간 · {Math.round((rec.route.segments||[]).reduce((s,v)=>s+(v.duration_minutes||0),0))}분 · {(rec.route.segments||[]).reduce((s,v)=>s+(v.distance_km||0),0).toFixed(1)}km
+                        </Typography>
+                      )}
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+
+            {/* 경로 정보 (현재 보기) */}
             {routeData && (
               <Box id="route-info" sx={{ mb: 2 }}>
-                <Typography fontWeight={700} sx={{ mb: 1 }}>📊 경로 정보</Typography>
+                <Typography fontWeight={700} sx={{ mb: 1 }}>📊 현재 경로 정보</Typography>
                 <Box id="route-segments">
                   {(routeData.segments || []).map((seg, idx) => (
                     <Paper
