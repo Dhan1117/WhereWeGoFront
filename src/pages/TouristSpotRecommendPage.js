@@ -94,7 +94,7 @@ const normalizeMlSpot = (p, i = 0) => {
 
 // ML 추천 타입 칩 메타 (category_type 기준)
 const ML_TYPE_META = {
-  top_3: { label: "설문+ML 상위", color: "secondary" },
+  top_3: { label: "설문+AI 상위", color: "secondary" },
   ml_high: { label: "AI 추천", color: "primary" },
   developer: { label: "개발자 추천", color: "success" },
 };
@@ -430,7 +430,7 @@ const TouristSpotRecommendPage = () => {
                 }} 
                 color="text.secondary"
               >
-                ML 결과로 받은 부산 관광지 20곳
+                AI 결과로 받은 부산 관광지 20곳
               </Typography>
             </Box>
             <Button 
@@ -515,50 +515,166 @@ const TouristSpotRecommendPage = () => {
           </Stack>
 
           {/* 🔔 안내 툴팁 */}
-          <Tooltip
-            arrow
-            placement={isMobile ? "top" : "left"}
-            title={
-              <Box sx={{ lineHeight: 1.6 }}>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    fontWeight: 700, 
-                    mb: 0.5, 
-                    fontSize: { xs: '0.7rem', sm: '0.8rem', md: '0.875rem' } 
-                  }}
-                >
-                  이 페이지 사용 팁
-                </Typography>
-                <Typography 
-                  variant="body2" 
-                  sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem', md: '0.875rem' } }}
-                >
-                  • 카드 이미지 좌상단의 <b>ML %</b>는 모델 점수예요.<br />
-                  • 태그 옆 <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff", fontSize: '0.6rem' }} /> /
-                  <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff", ml: .5, fontSize: '0.6rem' }} /> 배지도 함께 확인하세요.<br />
-                  • 마음에 드는 곳은 <b>일정에 추가</b>로 담고, 우측 패널에서 <b>코스 짜기</b>로 이동!
-                </Typography>
-              </Box>
-            }
+          {/* 🔔 안내 툴팁 */}
+<Tooltip
+  arrow
+  placement={isMobile ? "top" : "left"}
+  componentsProps={{
+    tooltip: {
+      sx: {
+        maxWidth: 520,
+        p: 2,
+        bgcolor: "rgba(17, 24, 39, 0.98)",            // 거의 불투명한 어두운 배경
+        color: "rgba(255,255,255,0.95)",               // 본문 글씨 색
+        border: "1px solid rgba(255,255,255,0.12)",    // 얇은 윤곽선
+        boxShadow: 8,                                  // 그림자 진하게
+        "& .MuiTypography-subtitle1": { color: "#fff" },
+        "& .MuiTypography-body2": { color: "rgba(255,255,255,0.88)" },
+        "& .MuiChip-root": {
+          borderColor: "rgba(255,255,255,0.18)"
+        }
+      }
+    },
+    arrow: {
+      sx: { color: "rgba(17, 24, 39, 0.98)" }
+    }
+  }}
+  title={
+    <Box sx={{ lineHeight: 1.7 }}>
+      {/* 상위 3개 추천 */}
+      <Typography
+        variant="subtitle1"
+        fontWeight={800}
+        sx={{ fontSize: { xs: '0.9rem', sm: '1rem', md: '1.05rem' }, mb: 0.5 }}
+      >
+        📌 상위 3개 추천
+      </Typography>
+      <Typography
+        variant="body2"
+        sx={{
+          fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' },
+          mb: 1.75
+        }}
+      >
+        사용자의 초기 설문조사와 라운드별 피드백이 모두 일치하는 최적 매칭 관광지입니다.
+        개인 선호도와 실제 반응을 종합 분석한 고정확도 추천 결과입니다.
+      </Typography>
+
+      {/* 개발자 추천 (제목 + 진짜 칩) */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+        <Typography
+          variant="subtitle1"
+          fontWeight={800}
+          sx={{ fontSize: { xs: '0.9rem', sm: '1rem', md: '1.05rem' } }}
+        >
+          🧑‍💻 개발자 추천
+        </Typography>
+      </Box>
+
+      <Typography
+        variant="body2"
+        sx={{
+          fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' },
+          mb: 0.75
+        }}
+      >
+        <Chip
+          size="small"
+          label="개발자 추천"
+          color="success"
+          sx={{ color: '#fff', fontSize: '0.6rem', height: '20px', ml: 0.25 }}
+        />{' '}
+        태그는 개인 취향뿐만 아니라 사회적 가치를 고려한 특별 추천입니다.
+      </Typography>
+
+      <Box component="ul" sx={{ pl: 2.25, mb: 1.75 }}>
+        <li>
+          <Typography
+            variant="body2"
+            sx={{
+              fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' }
+            }}
           >
-            <IconButton
-              size="small"
-              sx={{
-                position: "absolute",
-                bottom: { xs: 8, sm: 12 },
-                right: { xs: 8, sm: 12 },
-                bgcolor: "rgba(255,255,255,0.95)",
-                boxShadow: 1,
-                width: { xs: 28, sm: 32, md: 36 },
-                height: { xs: 28, sm: 32, md: 36 },
-                "&:hover": { bgcolor: "rgba(255,255,255,1)" }
-              }}
-              aria-label="도움말"
-            >
-              <PriorityHighIcon sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }} />
-            </IconButton>
-          </Tooltip>
+            오버투어리즘 해소: 과밀 관광지에 편향을 분산하고자 하는 목적
+          </Typography>
+        </li>
+        <li>
+          <Typography
+            variant="body2"
+            sx={{
+              fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' }
+            }}
+          >
+            지역경제 균형: 관광 수익이 편중되지 않으면서 경제 침체 해결
+          </Typography>
+        </li>
+        <li>
+          <Typography
+            variant="body2"
+            sx={{
+              fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' }
+            }}
+          >
+            개발자 추천이라는 태그에서 여러 관광지 여행 유도
+          </Typography>
+        </li>
+      </Box>
+
+      {/* 기타 추천 */}
+      <Typography
+        variant="subtitle1"
+        fontWeight={800}
+        sx={{
+          fontSize: { xs: '0.9rem', sm: '1rem', md: '1.05rem' },
+          mb: 0.5
+        }}
+      >
+        🧭 기타 추천
+      </Typography>
+      <Typography
+        variant="body2"
+        sx={{
+          fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' },
+          mb: 1.75
+        }}
+      >
+        사용자와 유사한 취향을 가진 다른 사용자들의 방문 패턴을 분석하여 도출한 협업 필터링 기반 추천 결과입니다.
+      </Typography>
+
+      <Typography
+        variant="body2"
+        fontWeight={700}
+        sx={{
+          fontSize: { xs: '0.75rem', sm: '0.85rem', md: '0.95rem' },
+          color: 'primary.main'
+        }}
+      >
+        여러분들의 개발자 추천 관광지의 관심은 부산 관광 산업 문제 해결에 기여됩니다!
+      </Typography>
+    </Box>
+  }
+>
+  <IconButton
+    size="small"
+    sx={{
+      position: 'absolute',
+      bottom: { xs: 8, sm: 12 },
+      right: { xs: 8, sm: 12 },
+      bgcolor: 'rgba(255,255,255,0.98)',
+      boxShadow: 1,
+      width: { xs: 28, sm: 32, md: 36 },
+      height: { xs: 28, sm: 32, md: 36 },
+      '&:hover': { bgcolor: '#fff' }
+    }}
+    aria-label="도움말"
+  >
+    <PriorityHighIcon
+      sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
+    />
+  </IconButton>
+</Tooltip>
+
+
         </Paper>
 
         {loading && (
@@ -606,7 +722,7 @@ const TouristSpotRecommendPage = () => {
                       {/* ML 점수 - 좌상단 */}
                       {showMlBadge && (
                         <Chip
-                          label={`ML ${mlPct}%`}
+                          label={`AI ${mlPct}%`}
                           size="small"
                           color="primary"
                           sx={{ position: "absolute", top: 8, left: 8, bgcolor: "rgba(99,102,241,0.95)", color: "#fff", fontWeight: 700 }}
@@ -687,7 +803,7 @@ const TouristSpotRecommendPage = () => {
                         ) : (
                           <>
                             {showMlBadge && (
-                              <Chip size="small" label="ML 추천" color="primary" sx={{ color: "#fff", fontSize: { xs: '0.65rem', sm: '0.75rem' }, height: { xs: '20px', sm: '24px' } }} />
+                              <Chip size="small" label="AI 추천" color="primary" sx={{ color: "#fff", fontSize: { xs: '0.65rem', sm: '0.75rem' }, height: { xs: '20px', sm: '24px' } }} />
                             )}
                             {isDevRecommended(spot) && (
                               <Chip size="small" label="개발자 추천" color="success" sx={{ color: "#fff", fontSize: { xs: '0.65rem', sm: '0.75rem' }, height: { xs: '20px', sm: '24px' } }} />

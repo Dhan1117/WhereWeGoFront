@@ -242,7 +242,7 @@ const pageVariants = {
 };
 const pageTransition = { type: "spring", stiffness: 260, damping: 24 };
 
-const steps = ["로그인", "설문", "투표", "ML 추천", "관리/테스트"];
+const steps = ["로그인", "설문", "투표", "AI 추천", "관리/테스트"];
 
 const cardEnter = {
   hidden: { opacity: 0, scale: 0.96, y: 12 },
@@ -725,9 +725,9 @@ export default function SurveyPage() {
       }
 
       setMlRecs(normalized);
-      showToast(resp?.message || `ML 추천 완료 (${normalized.length}곳)`, "success");
+      showToast(resp?.message || `AI 추천 완료 (${normalized.length}곳)`, "success");
     } catch (e) {
-      showToast(`ML 추천 실패: ${e.message}`, "error");
+      showToast(`AI 추천 실패: ${e.message}`, "error");
     } finally {
       setLoading(false);
     }
@@ -747,7 +747,7 @@ export default function SurveyPage() {
 
   const goSpotRecommend = () => {
     if (!mlRecs?.length) {
-      showToast("먼저 ML 추천을 받아주세요.", "warning");
+      showToast("먼저 AI 추천을 받아주세요.", "warning");
       return;
     }
 
@@ -856,7 +856,7 @@ export default function SurveyPage() {
               variant="body1"
               sx={{ opacity: 0.8, mt: 0.5, fontSize: { xs: "0.75rem", sm: "0.85rem", md: "1rem" }, display: { xs: "none", sm: "block" } }}
             >
-              JWT 토큰 기반 보안 설문·추천 테스트
+            
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} alignItems="center">
@@ -1264,14 +1264,14 @@ export default function SurveyPage() {
                   <Card variant="outlined" sx={{ borderColor: tone.border }}>
                     <CardHeader
                       avatar={<ScienceIcon color="primary" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }} />}
-                      title="4. ML 모델 추천 (20곳)"
+                      title="4. AI 모델 추천"
                       subheader="설문과 투표를 기반으로 추천"
                       titleTypographyProps={{ fontWeight: 700, fontSize: { xs: "1.1rem", sm: "1.25rem", md: "1.5rem" } }}
                       subheaderTypographyProps={{ fontSize: { xs: "0.75rem", sm: "0.85rem", md: "0.95rem" } }}
                     />
                     <CardActions sx={{ px: 2, pt: 0, flexWrap: "wrap", gap: 1 }}>
                       <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        ML 추천 받기
+                        AI 추천 받기
                       </Button>
                       <Button variant="text" onClick={handleModelStatus} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
                         모델 상태 확인
@@ -1287,7 +1287,7 @@ export default function SurveyPage() {
                     <CardContent sx={{ maxHeight: { xs: "50vh", sm: "60vh", md: 420 }, overflow: "auto" }}>
                       {!mlRecs.length ? (
                         <Alert severity="info" sx={{ fontSize: { xs: "0.8rem", sm: "0.9rem" } }}>
-                          아직 결과가 없습니다. "ML 추천 받기"를 눌러주세요.
+                          아직 결과가 없습니다. "AI 추천 받기"를 눌러주세요.
                         </Alert>
                       ) : (
                         <Stack spacing={1.5}>

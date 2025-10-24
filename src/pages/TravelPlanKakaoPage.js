@@ -1,8 +1,8 @@
-// src/pages/KakaoCourseTestPage.jsx (with multi-day itinerary)
+// src/pages/TravelPlanKakaoPage.js
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
-  Box, Paper, Typography, Stack, Button, Select, MenuItem,
-  Alert, Divider, Chip, IconButton, CircularProgress, Grid, TextField
+  Box, Paper, Typography, Stack, Button, Select, MenuItem, Alert, Divider, Chip,
+  IconButton, CircularProgress, Grid, TextField, Tooltip, Snackbar, ToggleButton, ToggleButtonGroup
 } from "@mui/material";
 import DirectionsIcon from "@mui/icons-material/Directions";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
@@ -18,35 +18,34 @@ import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ReplayIcon from "@mui/icons-material/Replay";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import TuneIcon from "@mui/icons-material/Tune";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
+import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
+import HandymanIcon from "@mui/icons-material/Handyman";
 import { useLocation, useNavigate } from "react-router-dom";
 
-// ─────────────────────────────────────────────────────────────────────
-// ENV
-// ─────────────────────────────────────────────────────────────────────
+/** ENV */
 const API_PREFIX =
   process.env.REACT_APP_API_PREFIX ||
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_PREFIX) ||
+  (typeof import.meta !== "undefined" && import.meta.env && (import.meta.env.VITE_API_PREFIX || import.meta.env.VITE_API_BASE_URL)) ||
   "http://localhost:8000";
 const API_BASE_URL = `${API_PREFIX.replace(/\/$/, "")}`;
 
 const KAKAO_APPKEY =
   process.env.REACT_APP_KAKAO_MAP_APPKEY ||
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_KAKAO_MAP_APPKEY) ||
-  "89fc5955b80f4c5ac937b020e1d7855c";
+  "";
 
-// 샘플 ObjectId 목록 (fallback)
-const SAMPLE_PLACE_IDS = [
-  "681891fa77e67d6ebadae358",
-  "681891fa77e67d6ebadae359",
-  "681891fa77e67d6ebadae35a",
-  "681891fa77e67d6ebadae35b",
-  "681891fa77e67d6ebadae35c",
-];
+const GOOGLE_API_KEY =
+  process.env.REACT_APP_GOOGLE_MAPS_KEY ||
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GOOGLE_MAPS_KEY) ||
+  "";
 
-// 아이콘 선택
+/** Helpers */
 function iconFor(place) {
   const name = (place?.name || "").toLowerCase();
-  const cat = (place?.category_type || place?.category_group || "").toLowerCase();
+  const cat = (place?.category_type || place?.category_group || place?.category || "").toLowerCase();
   if (name.includes("해수욕장") || name.includes("beach")) return "🏖️";
   if (name.includes("공원")) return "🌳";
   if (name.includes("시장")) return "🐟";
@@ -59,22 +58,20 @@ function iconFor(place) {
   if (cat.includes("자연")) return "🌲";
   if (cat.includes("레포츠")) return "⚽";
   if (cat.includes("쇼핑")) return "🛍️";
-  if (cat.includes("음식")) return "🍽️";
-  if (cat.includes("숙박")) return "🏨";
+  if (cat.includes("음식") || cat.includes("restaurant") || cat.includes("food")) return "🍽️";
+  if (cat.includes("숙박") || cat.includes("hotel")) return "🏨";
   return "📍";
 }
-
 const VEH_ICON = { BUS: "🚌", SUBWAY: "🚇", TRAIN: "🚆", TRAM: "🚊", RAIL: "🚄", FERRY: "⛴️" };
 const vehicleIcon = (t) => VEH_ICON[t] || "🚍";
-
-// HTML 태그 제거
 function stripHTML(html = "") {
   const d = document.createElement("div");
   d.innerHTML = html;
   return d.textContent || d.innerText || "";
 }
+const dayColor = (i) => `hsl(${(i * 65) % 360}, 70%, 45%)`;
 
-// Kakao SDK 안전 로더
+/** Kakao loader */
 async function ensureKakaoMaps(appkey) {
   if (!appkey) throw new Error("Kakao appkey is missing");
   if (window.kakao?.maps) return window.kakao;
@@ -123,76 +120,84 @@ async function ensureKakaoMaps(appkey) {
   const q = `?autoload=false&appkey=${encodeURIComponent(appkey)}&libraries=services,clusterer,drawing`;
   try {
     return await loadOnce(base + q);
-  } catch (e1) {
-    console.warn("[KakaoSDK] https load failed -> retry protocol-relative", e1);
+  } catch {
     return loadOnce("//dapi.kakao.com/v2/maps/sdk.js" + q);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────────
-export default function KakaoCourseTestPage() {
+/** Haversine (fallback) */
+function haversineKm(a, b) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad((b?.lat ?? 0) - (a?.lat ?? 0));
+  const dLng = toRad((b?.lng ?? 0) - (a?.lng ?? 0));
+  const la1 = toRad(a?.lat ?? 0), la2 = toRad(b?.lat ?? 0);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** Component */
+export default function TravelPlanKakaoPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 장소들 (DB or 전달받은 state에서 로드)
-  const [places, setPlaces] = useState([]); // [{id, name, category, icon, rating?, address?, lat?, lng?}]
+  // 장소
+  const [places, setPlaces] = useState([]);
   const [loadingPlaces, setLoadingPlaces] = useState(true);
   const [placesError, setPlacesError] = useState("");
 
-  // 추천 코스
-  const [presets, setPresets] = useState({
-    classic: [],
-    history: [],
-    nature: [],
-    family: [],
-  });
+  // 프리셋
+  const [presets, setPresets] = useState({ classic: [], history: [], nature: [], family: [] });
 
-  // 선택/검색/모드
-  const [selectedNames, setSelectedNames] = useState([]); // 이름 배열
-  const [nameToIdMap, setNameToIdMap] = useState({}); // { name: objectId }
+  // 계획 모드: 'manual' | 'ai'
+  const [planningMode, setPlanningMode] = useState("manual");
+
+  // 수동 선택 / 모드
+  const [selectedNames, setSelectedNames] = useState([]);
+  const [nameToIdMap, setNameToIdMap] = useState({});
   const [mode, setMode] = useState("transit");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🗓️ 다일차 일정 (신규)
-  // dayRecords: [{ day: 1, names: [...], ids: [...], route: {...} }]
-  const [dayRecords, setDayRecords] = useState([]);
-
-  // Kakao map
+  // 지도
   const [sdkError, setSdkError] = useState("");
   const [kakaoLoaded, setKakaoLoaded] = useState(false);
   const mapRef = useRef(null);
   const mapElRef = useRef(null);
-
-  // 지도 그리기 핸들
   const markersRef = useRef([]);
   const polylinesRef = useRef([]);
   const overlaysRef = useRef([]);
 
-  // 경로 데이터(현재 화면에 보이는 것)
+  // 수동 경로/일정
   const [routeData, setRouteData] = useState(null);
+  const [dayRecords, setDayRecords] = useState([]);
   const [generating, setGenerating] = useState(false);
 
-  // 지도 전체화면 토글
-  const [mapFull, setMapFull] = useState(false);
+  // 일정 옵션(수동/AI 공용)
+  const [avgStayMins, setAvgStayMins] = useState(80);
+  const [budgetMinsPerDay, setBudgetMinsPerDay] = useState(8 * 60);
+  const [addMeals, setAddMeals] = useState(true);
 
-  // ── 초기 로딩: (1) 라우팅 state.spots 우선 → (2) DB → (3) 샘플 → (4) 카카오맵
+  // AI 상태
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiPlan, setAiPlan] = useState(null); // {dailySchedule:[...]}
+
+  // UI
+  const [mapFull, setMapFull] = useState(false);
+  const [toast, setToast] = useState({ open: false, msg: "", sev: "info" });
+
+  /** 초기 로딩 */
   useEffect(() => {
     (async () => {
       try {
-        setPlacesError("");
-
-        // ① TouristSpotRecommendPage에서 넘어온 spots 사용
         const incoming = Array.isArray(location.state?.spots) ? location.state.spots : [];
         if (incoming.length) {
           const mapped = incoming.map((s) => ({
             id: s.id || s._id,
             name: s.name || "이름 없음",
-            category: s.category || "관광지",
-            icon: iconFor(s) || "📍",
-            rating: typeof s.rating === "number" ? s.rating : 0,
+            category: s.category || s.category_group || "관광지",
+            icon: iconFor(s),
             address: s.address || "",
+            rating: typeof s.rating === "number" ? s.rating : 0,
             lat: s.lat,
             lng: s.lng,
           }));
@@ -202,42 +207,38 @@ export default function KakaoCourseTestPage() {
           setNameToIdMap(n2i);
           setupPresets(mapped);
         } else {
-          // ② state가 없으면 DB에서 로딩
           await loadPlacesFromDB();
         }
       } catch (e) {
         console.error(e);
         setPlacesError(e?.message || "장소 로드 실패");
-        // ③ Fallback: 샘플 ObjectId로 최소한의 목록 구성
-        await loadPlacesBySampleIds();
       } finally {
         setLoadingPlaces(false);
       }
 
-      // ④ 카카오맵 초기화
       try {
         const kakao = await ensureKakaoMaps(KAKAO_APPKEY);
         setKakaoLoaded(true);
         if (mapElRef.current) {
           mapRef.current = new kakao.maps.Map(
             mapElRef.current,
-            { center: new kakao.maps.LatLng(35.1796, 129.0756), level: 8 } // 부산 중심
+            { center: new kakao.maps.LatLng(35.1796, 129.0756), level: 8 }
           );
         }
       } catch (e) {
         console.error(e);
         setSdkError(
           (e?.message || "Kakao SDK 로딩 실패") +
-            "\n- 카카오 개발자 콘솔 > 내 애플리케이션 > 플랫폼 > 웹 에 현재 도메인(프로토콜/포트 포함) 등록" +
-            "\n- JavaScript 키인지 확인(REST 키 X)" +
-            "\n- dapi.kakao.com 차단되지 않았는지 확인"
+          "\n- 카카오 개발자 콘솔 > 내 애플리케이션 > 플랫폼에 웹 도메인 등록" +
+          "\n- JavaScript 키 사용(REST 키 X)" +
+          "\n- dapi.kakao.com 차단 여부 확인"
         );
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── DB에서 장소 로딩
+  /** DB 로딩 */
   const loadPlacesFromDB = async () => {
     const res = await fetch(`${API_BASE_URL}/api/v1/simple_detail`);
     if (!res.ok) throw new Error(`API 오류: ${res.status}`);
@@ -262,40 +263,7 @@ export default function KakaoCourseTestPage() {
     setupPresets(mapped);
   };
 
-  // ── Fallback: 샘플 ID로 최소 로딩
-  const loadPlacesBySampleIds = async () => {
-    const tmp = [];
-    const n2i = {};
-    for (const oid of SAMPLE_PLACE_IDS) {
-      try {
-        const r = await fetch(`${API_BASE_URL}/api/v1/simple_detail?query=${oid}`);
-        const data = await r.json();
-        if (Array.isArray(data) && data[0]) {
-          const p = data[0];
-          const id = p.id || p._id;
-          const obj = {
-            id,
-            name: p.name || "장소",
-            category: p.category_group || "관광지",
-            icon: iconFor(p),
-            rating: p.rating || 0,
-            address: p.address || "",
-            lat: p.lat,
-            lng: p.lng,
-          };
-          tmp.push(obj);
-          n2i[obj.name] = id;
-        }
-      } catch (e) {
-        console.warn("샘플 로드 실패", oid, e);
-      }
-    }
-    setPlaces(tmp);
-    setNameToIdMap((prev) => ({ ...prev, ...n2i }));
-    setupPresets(tmp);
-  };
-
-  // ── 추천 코스 구성 (이름 배열)
+  /** 프리셋 */
   const setupPresets = (arr) => {
     if (!arr?.length) return;
     const byName = (names) => {
@@ -307,7 +275,6 @@ export default function KakaoCourseTestPage() {
       return hit;
     };
 
-    // 1) 직접 매칭 시도
     let classic = byName(["해운대", "광안리", "감천"]);
     if (classic.length < 3 && arr.length >= 3) classic = arr.slice(0, 3).map((p) => p.name);
 
@@ -318,78 +285,35 @@ export default function KakaoCourseTestPage() {
     setPresets({ classic, history, nature, family });
   };
 
-  // ── 선택/해제
-  const togglePlace = (name) => {
-    setSelectedNames((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
-  };
-  const removePlace = (name) => {
-    setSelectedNames((prev) => prev.filter((n) => n !== name));
-  };
-  const clearSelection = () => {
-    setSelectedNames([]);
-    setRouteData(null);
-    clearMap();
-  };
+  /** 수동 선택 */
+  const togglePlace = (name) => setSelectedNames((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
+  const removePlace = (name) => setSelectedNames((prev) => prev.filter((n) => n !== name));
+  const clearSelection = () => { setSelectedNames([]); setRouteData(null); clearMap(); };
 
-  // ── 추천 코스 클릭 → 자동 대중교통, 자동 경로 생성
-  const loadPresetCourse = async (type) => {
-    const course = presets[type] || [];
-    if (!course.length) {
-      if (places.length >= 3) {
-        const rand = places.slice(0, Math.min(10, places.length)).sort(() => Math.random() - 0.5).slice(0, 3).map((p) => p.name);
-        setSelectedNames(rand);
-      } else {
-        alert("아직 장소 데이터가 부족합니다.");
-        return;
-      }
-    } else {
-      setSelectedNames(course);
-    }
-    setMode("transit");
-    setTimeout(() => generateRoute(), 300);
-  };
-
-  // ── place name → ObjectId
+  /** 이름→ObjectId */
   const getPlaceIds = async (names) => {
     const ids = [];
     const misses = [];
     for (const nm of names) {
-      // 1) 캐시
-      if (nameToIdMap[nm]) {
-        ids.push(nameToIdMap[nm]);
-        continue;
-      }
-      // 2) 로컬 places
+      if (nameToIdMap[nm]) { ids.push(nameToIdMap[nm]); continue; }
       const local = places.find((p) => p.name === nm);
-      if (local?.id) {
-        ids.push(local.id);
-        setNameToIdMap((prev) => ({ ...prev, [nm]: local.id }));
-        continue;
-      }
-      // 3) API 검색
+      if (local?.id) { ids.push(local.id); setNameToIdMap((prev) => ({ ...prev, [nm]: local.id })); continue; }
       try {
         const r = await fetch(`${API_BASE_URL}/api/v1/simple_detail?query=${encodeURIComponent(nm)}`);
         if (!r.ok) throw new Error(`search ${nm} http ${r.status}`);
         const data = await r.json();
         if (Array.isArray(data) && data[0]) {
           const oid = data[0].id || data[0]._id;
-          if (oid) {
-            ids.push(oid);
-            setNameToIdMap((prev) => ({ ...prev, [nm]: oid }));
-            continue;
-          }
+          if (oid) { ids.push(oid); setNameToIdMap((prev) => ({ ...prev, [nm]: oid })); continue; }
         }
         misses.push(nm);
-      } catch (e) {
-        console.warn("검색 실패:", nm, e);
-        misses.push(nm);
-      }
+      } catch (e) { console.warn("검색 실패:", nm, e); misses.push(nm); }
     }
     if (misses.length) throw new Error(`다음 장소를 찾지 못했습니다:\n- ${misses.join("\n- ")}`);
     return ids;
   };
 
-  // ── 지도 클리어
+  /** 지도 클리어/그리기 */
   const clearMap = useCallback(() => {
     markersRef.current.forEach(({ marker }) => marker.setMap(null));
     polylinesRef.current.forEach((p) => p.setMap(null));
@@ -399,38 +323,25 @@ export default function KakaoCourseTestPage() {
     overlaysRef.current = [];
   }, []);
 
-  // ── 지도에 표시
   const drawOnMap = useCallback(
     (data) => {
       const kakao = window.kakao;
       if (!kakao || !mapRef.current) return;
       clearMap();
 
-      // 중심/레벨
-      if (data?.center) {
-        mapRef.current.setCenter(new kakao.maps.LatLng(data.center.lat, data.center.lng));
-      }
-      if (data?.zoom != null) {
-        mapRef.current.setLevel(Number(data.zoom));
-      }
+      if (data?.center) mapRef.current.setCenter(new kakao.maps.LatLng(data.center.lat, data.center.lng));
+      if (data?.zoom != null) mapRef.current.setLevel(Number(data.zoom));
 
-      // 마커
       (data?.markers || []).forEach((m) => {
         const pos = new kakao.maps.LatLng(m.lat, m.lng);
         const marker = new kakao.maps.Marker({ position: pos, map: mapRef.current });
         const infowindow = new kakao.maps.InfoWindow({
-          content: `
-            <div style="padding:10px; min-width:150px;">
-              <strong>${m.order}. ${m.name}</strong><br/>
-              <small style="color:#666;">${m.address ?? ""}</small>
-            </div>
-          `,
+          content: `<div style="padding:10px; min-width:150px;"><strong>${m.order}. ${m.name}</strong><br/><small style="color:#666;">${m.address ?? ""}</small></div>`,
         });
         kakao.maps.event.addListener(marker, "click", () => infowindow.open(mapRef.current, marker));
         markersRef.current.push({ marker, infowindow });
       });
 
-      // 경로선 + 스텝 오버레이
       (data?.segments || []).forEach((seg) => {
         const path = (seg.polyline || []).map((p) => new kakao.maps.LatLng(p.lat, p.lng));
         if (path.length) {
@@ -454,20 +365,9 @@ export default function KakaoCourseTestPage() {
           let html = "";
           if (step.travel_mode === "TRANSIT" && step.transit_details) {
             const t = step.transit_details;
-            html = `
-              <div style="
-                padding:8px 12px;background:#fff;border:2px solid ${seg.color || "#667eea"};
-                border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.2);
-                font-weight:bold;font-size:13px;white-space:nowrap;">
-                ${vehicleIcon(t.vehicle_type)} ${t.line_short_name || t.line_name || ""}
-              </div>`;
+            html = `<div style="padding:8px 12px;background:#fff;border:2px solid ${seg.color || "#667eea"};border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.2);font-weight:bold;font-size:13px;white-space:nowrap;">${vehicleIcon(t.vehicle_type)} ${t.line_short_name || t.line_name || ""}</div>`;
           } else if (step.travel_mode === "WALKING") {
-            html = `
-              <div style="
-                padding:6px 10px;background:#52b788;color:#fff;border-radius:14px;
-                box-shadow:0 2px 6px rgba(0,0,0,.15);font-weight:bold;font-size:12px;white-space:nowrap;">
-                🚶 ${step.duration || ""}
-              </div>`;
+            html = `<div style="padding:6px 10px;background:#52b788;color:#fff;border-radius:14px;box-shadow:0 2px 6px rgba(0,0,0,.15);font-weight:bold;font-size:12px;white-space:nowrap;">🚶 ${step.duration || ""}</div>`;
           } else return;
           const overlay = new kakao.maps.CustomOverlay({ position: pos, content: html, yAnchor: 0.5 });
           overlay.setMap(mapRef.current);
@@ -478,36 +378,59 @@ export default function KakaoCourseTestPage() {
     [clearMap]
   );
 
-  // ── 경로 생성 (+ 일정에 자동 추가)
+  /** 수동 경로 생성 */
+  const preplanNames = async (names) => {
+    if (names.length < 2) return names;
+    const pts = names.map((nm) => places.find((p) => p.name === nm)).filter(Boolean);
+    const idxs = pts.map((p) => names.findIndex((nm) => nm === p.name));
+
+    const nearestOrder = (() => {
+      if (pts.length <= 2) return idxs.map((_, i) => i);
+      const rem = idxs.map((_, i) => i);
+      const route = [rem.shift()];
+      while (rem.length) {
+        const last = route[route.length - 1];
+        let best = 0, bestDist = Infinity;
+        rem.forEach((ri, i) => {
+          const d = haversineKm(pts[last], pts[ri]);
+          if (d < bestDist) { bestDist = d; best = i; }
+        });
+        route.push(rem.splice(best, 1)[0]);
+      }
+      return route;
+    })();
+
+    let order = nearestOrder.map((i) => i);
+
+    // 간단한 예산 체크
+    const totalLegKm = order.slice(0, -1).reduce((s, _, i) => s + haversineKm(pts[order[i]], pts[order[i + 1]]), 0);
+    const moveMins = (totalLegKm / (mode === "walking" ? 4.5 : mode === "driving" ? 35 : 22)) * 60;
+    const placeCount = order.length;
+    const totalMins = moveMins + placeCount * avgStayMins;
+    let final = order.slice();
+    if (totalMins > budgetMinsPerDay && placeCount >= 3) {
+      final = order.slice(0, order.length - 1);
+      setToast({ open: true, msg: "하루 예산 초과로 방문지 1곳을 줄였습니다.", sev: "info" });
+    }
+    return final.map((oi) => pts[oi]?.name).filter(Boolean);
+  };
+
   const generateRoute = async () => {
     try {
-      if (selectedNames.length < 2) {
-        alert("최소 2개 이상의 장소를 선택해주세요.");
-        return;
-      }
+      if (selectedNames.length < 2) { alert("최소 2개 이상의 장소를 선택해주세요."); return; }
       setGenerating(true);
-      const placeIds = await getPlaceIds(selectedNames);
+      const plannedNames = await preplanNames(selectedNames);
+      if (plannedNames.length < 2) { alert("일정이 2곳 미만으로 축소되어 경로를 생성할 수 없습니다."); return; }
+      const finalIds = await getPlaceIds(plannedNames);
       const res = await fetch(`${API_BASE_URL}/api/v1/map/course-route`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ places: placeIds, mode }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ places: finalIds, mode }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setRouteData(data);
       drawOnMap(data);
-
-      // ✅ N일차 자동 추가
-      setDayRecords((prev) => [
-        ...prev,
-        {
-          day: prev.length + 1,
-          names: [...selectedNames],
-          ids: placeIds,
-          route: data,
-          mode,
-        },
-      ]);
+      setDayRecords((prev) => [...prev, { day: prev.length + 1, names: plannedNames, ids: finalIds, route: data, mode }]);
     } catch (e) {
       console.error(e);
       alert(`경로 생성 실패: ${e?.message || "unknown"}`);
@@ -516,54 +439,7 @@ export default function KakaoCourseTestPage() {
     }
   };
 
-  // ── UI 조각: 장소 카드
-  const PlaceItem = ({ place }) => {
-    const selected = selectedNames.includes(place.name);
-    return (
-      <Paper
-        onClick={() => togglePlace(place.name)}
-        elevation={0}
-        sx={{
-          p: 1.5, mb: 1, borderRadius: 2, cursor: "pointer",
-          border: "2px solid",
-          borderColor: selected ? "primary.main" : "divider",
-          bgcolor: selected ? "primary.main" : "background.paper",
-          color: selected ? "primary.contrastText" : "text.primary",
-          transition: "0.2s",
-          "&:hover": { transform: "translateX(4px)", boxShadow: selected ? 0 : 2, borderColor: "primary.main" },
-          display: "flex", alignItems: "center", gap: 1.5,
-        }}
-      >
-        <Box sx={{ fontSize: 22, width: 28, textAlign: "center" }}>{place.icon}</Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography noWrap fontWeight={700}>{place.name}</Typography>
-          <Typography variant="body2" noWrap sx={{ opacity: 0.7 }}>
-            {place.category}
-          </Typography>
-        </Box>
-      </Paper>
-    );
-  };
-
-  // ── UI 조각: 추천 코스 타일
-  const PresetTile = ({ title, hint, icon, type }) => (
-    <Paper
-      onClick={() => loadPresetCourse(type)}
-      elevation={0}
-      sx={{
-        p: 1.5, mb: 1, borderRadius: 2, border: "2px solid", borderColor: "divider",
-        cursor: "pointer",
-        "&:hover": { transform: "translateX(4px)", borderColor: "primary.main" },
-      }}
-    >
-      <Typography fontWeight={700} sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-        {icon} {title}
-      </Typography>
-      <Typography variant="body2" color="text.secondary">{hint}</Typography>
-    </Paper>
-  );
-
-  // ── 검색: 이름으로 simple_detail 조회 후 추가
+  /** 검색 추가 (수동) */
   const searchAndAdd = async () => {
     const q = searchQuery.trim();
     if (!q) return;
@@ -576,7 +452,7 @@ export default function KakaoCourseTestPage() {
         const nm = p.name || q;
         setNameToIdMap((prev) => ({ ...prev, [nm]: id }));
         if (!places.find((x) => x.name === nm)) {
-          setPlaces((prev) => [...prev, { id, name: nm, category: p.category_group || "관광지", icon: iconFor(p) }]);
+          setPlaces((prev) => [...prev, { id, name: nm, category: p.category_group || p.category || "관광지", icon: iconFor(p), lat: p.lat, lng: p.lng }]);
         }
         setSelectedNames((prev) => (prev.includes(nm) ? prev : [...prev, nm]));
         setSearchQuery("");
@@ -589,68 +465,209 @@ export default function KakaoCourseTestPage() {
     }
   };
 
-  const totalDist = useMemo(
-    () => (routeData?.segments || []).reduce((s, v) => s + (v.distance_km || 0), 0),
-    [routeData]
-  );
-  const totalMins = useMemo(
-    () => (routeData?.segments || []).reduce((s, v) => s + (v.duration_minutes || 0), 0),
-    [routeData]
-  );
+  /** 일정/지도 조작(수동) */
+  const focusDayOnMap = (idx) => { const rec = dayRecords[idx]; if (!rec) return; setRouteData(rec.route); drawOnMap(rec.route); };
+  const deleteDay = (idx) => { setDayRecords((prev) => prev.filter((_, i) => i !== idx).map((r, i) => ({ ...r, day: i + 1 }))); };
+  const reAddSelectionFromDay = (idx) => { const rec = dayRecords[idx]; if (!rec) return; setSelectedNames(rec.names); };
 
-  // 🗓️ 일정 조작: 보기/삭제/다시 그리기
-  const focusDayOnMap = (idx) => {
-    const rec = dayRecords[idx];
-    if (!rec) return;
-    setRouteData(rec.route);
-    drawOnMap(rec.route);
-  };
-  const deleteDay = (idx) => {
-    setDayRecords((prev) => prev.filter((_, i) => i !== idx).map((r, i) => ({ ...r, day: i + 1 })));
-  };
-  const reAddSelectionFromDay = (idx) => {
-    const rec = dayRecords[idx];
-    if (!rec) return;
-    setSelectedNames(rec.names);
-    setMode(rec.mode || "transit");
-  };
   const clearAllDays = () => setDayRecords([]);
 
+  /** 합계(현재 지도 경로) */
+  const totalDist = useMemo(() => (routeData?.segments || []).reduce((s, v) => s + (v.distance_km || 0), 0), [routeData]);
+  const totalMins = useMemo(() => (routeData?.segments || []).reduce((s, v) => s + (v.duration_minutes || 0), 0), [routeData]);
+
+  /** ── AI 자동 코스: 담아온 관광지 + 일정옵션 포함 ── */
+  const handleGenerateAIFromCaptured = async () => {
+    try {
+      // 담아온 관광지(라우팅 state 우선), 없으면 로드된 places 전체 사용
+      const baseList =
+        Array.isArray(location.state?.spots) && location.state.spots.length
+          ? location.state.spots.map((s) => ({ name: s.name, id: s.id || s._id }))
+          : places.map((p) => ({ name: p.name, id: p.id }));
+
+      if (baseList.length < 2) { alert("담아온(또는 로드된) 관광지가 2곳 이상이어야 합니다."); return; }
+
+      setAiGenerating(true);
+
+      const names = baseList.map((b) => b.name);
+      const ids = (await getPlaceIds(names)) || baseList.map((b) => b.id).filter(Boolean);
+      if (!ids.length) throw new Error("장소 ID를 확인할 수 없습니다.");
+
+      const travelDuration = Math.max(1, Math.ceil(ids.length / 3));
+      const transportModeMap = { transit: "TRANSIT", driving: "DRIVE", walking: "WALK" };
+
+      const payload = {
+        spots: ids,
+        user_id: null,
+        travelDuration,
+        starting_point: ids[0],
+        transport_mode: transportModeMap[mode] || "DRIVE",
+        is_public: false,
+        description: "AI 자동 코스",
+        // 일정 옵션 전달 (백엔드에서 사용 시 키 매핑 필요)
+        planning_options: {
+          avg_stay_minutes: avgStayMins,
+          daily_budget_minutes: budgetMinsPerDay,
+          include_meals: !!addMeals,
+          prefer_mode: transportModeMap[mode] || "DRIVE",
+        },
+      };
+
+      const resp = await fetch(`${API_BASE_URL}/api/v1/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(`/generate 오류: ${resp.status} - ${t}`);
+      }
+      const plan = await resp.json();
+      if (!plan?.dailySchedule?.length) throw new Error("생성된 일정이 비어있습니다.");
+
+      setAiPlan(plan);
+
+      // 1일차 지도로 표시
+      await drawAIDayOnMap(0, plan);
+    } catch (e) {
+      console.error(e);
+      alert(`AI 코스 생성 실패: ${e?.message || "unknown"}`);
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const drawAIDayOnMap = async (dayIndex, plan = aiPlan) => {
+    if (!plan?.dailySchedule?.[dayIndex]) return;
+    try {
+      const day = plan.dailySchedule[dayIndex];
+      const dayNames = day.places.map((p) => p.name);
+      const dayIds = (await getPlaceIds(dayNames)).filter(Boolean);
+
+      const res = await fetch(`${API_BASE_URL}/api/v1/map/course-route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ places: dayIds, mode }),
+      });
+      if (!res.ok) throw new Error(`/map/course-route HTTP ${res.status}`);
+      const data = await res.json();
+      setRouteData(data);
+      drawOnMap(data);
+    } catch (e) {
+      console.error(e);
+      setToast({ open: true, msg: "지도로 표시 중 문제가 발생했습니다.", sev: "warning" });
+    }
+  };
+
+  /** 작은 프레젠테이셔널 컴포넌트들 (파일 내부에 정의) */
+  const PlaceItem = ({ place }) => {
+    const selected = selectedNames.includes(place.name);
+    return (
+      <Paper
+        onClick={() => planningMode === "manual" && togglePlace(place.name)}
+        elevation={0}
+        sx={{
+          p: 1.5, mb: 1, borderRadius: 2, cursor: planningMode === "manual" ? "pointer" : "default",
+          border: "2px solid", borderColor: planningMode === "manual" && selected ? "primary.main" : "divider",
+          bgcolor: planningMode === "manual" && selected ? "primary.main" : "background.paper",
+          color: planningMode === "manual" && selected ? "primary.contrastText" : "text.primary",
+          transition: "0.18s",
+          "&:hover": planningMode === "manual" ? { transform: "translateX(4px)", boxShadow: selected ? 0 : 2, borderColor: "primary.main" } : {},
+          display: "flex", alignItems: "center", gap: 1.5,
+          opacity: planningMode === "ai" ? 0.6 : 1,
+        }}
+      >
+        <Box sx={{ fontSize: 22, width: 28, textAlign: "center" }}>{place.icon || "📍"}</Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography noWrap fontWeight={700}>{place.name}</Typography>
+          <Typography variant="body2" noWrap sx={{ opacity: 0.7 }}>{place.category}</Typography>
+        </Box>
+      </Paper>
+    );
+  };
+
+  const PresetTile = ({ title, hint, icon, type }) => (
+    <Paper
+      onClick={() => planningMode === "manual" && loadPresetCourse(type)}
+      elevation={0}
+      sx={{
+        p: 1.5, mb: 1, borderRadius: 2, border: "2px solid", borderColor: "divider",
+        cursor: planningMode === "manual" ? "pointer" : "default",
+        "&:hover": planningMode === "manual" ? { transform: "translateX(4px)", borderColor: "primary.main" } : {},
+        opacity: planningMode === "ai" ? 0.5 : 1,
+      }}
+    >
+      <Typography fontWeight={700} sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+        {icon} {title}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">{hint}</Typography>
+    </Paper>
+  );
+
+  const loadPresetCourse = async (type) => {
+    const course = presets[type] || [];
+    if (!course.length) {
+      if (places.length >= 3) {
+        const rand = places.slice(0, Math.min(10, places.length)).sort(() => Math.random() - 0.5).slice(0, 3).map((p) => p.name);
+        setSelectedNames(rand);
+      } else { alert("아직 장소 데이터가 부족합니다."); return; }
+    } else { setSelectedNames(course); }
+    setTimeout(() => generateRoute(), 250);
+  };
+
+  /** Render */
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       {/* 헤더 */}
-      <Paper
-        sx={{
-          mb: 2, borderRadius: 3, overflow: "hidden",
-          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-          color: "white",
-        }}
-      >
+      <Paper sx={{ mb: 2, borderRadius: 3, overflow: "hidden", background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", color: "white" }}>
         <Box sx={{ p: 3, textAlign: "center" }}>
-          <Typography variant="h4" fontWeight={800}>🗺️ 부산 여행 코스 경로 테스트</Typography>
+          <Typography variant="h4" fontWeight={800}>🧭 TravelPlan Kakao Page</Typography>
           <Typography sx={{ opacity: 0.9, mt: 1 }}>
-            관광지를 선택하고 카카오맵에서 실제 경로를 확인해보세요!
+            담아온 관광지로 <b>AI 자동코스</b> 또는 <b>직접 코스</b>를 생성하세요.
           </Typography>
         </Box>
       </Paper>
 
-      {/* 본문: 좌(사이드바) / 우(지도) */}
       <Grid container spacing={0}>
-        {/* 왼쪽 패널: 전체 스크롤 */}
+        {/* 좌측 패널 */}
         <Grid item xs={12} md={4} lg={4}>
-          <Box
-            sx={{
-              p: 3,
-              bgcolor: "#f8f9fa",
-              borderRight: { md: "1px solid #dee2e6" },
-              height: { md: "calc(100vh - 220px)" }, // 헤더 높이에 따라 조절
-              minHeight: 700,
-              overflowY: "auto", // << 전체 스크롤 포인트
-            }}
-          >
+          <Box sx={{ p: 3, bgcolor: "#f8f9fa", borderRight: { md: "1px solid #dee2e6" }, height: { md: "calc(100vh - 220px)" }, minHeight: 700, overflowY: "auto" }}>
+
+            {/* 계획 모드 토글 */}
+            <Paper sx={{ p: 2, mb: 2 }}>
+              <Typography fontWeight={700} sx={{ mb: 1 }}>🧩 코스 생성 방식</Typography>
+              <ToggleButtonGroup
+                color="primary"
+                exclusive
+                value={planningMode}
+                onChange={(_, v) => v && setPlanningMode(v)}
+                fullWidth
+                size="small"
+              >
+                <ToggleButton value="manual"><HandymanIcon fontSize="small" />&nbsp;직접 코스 짜기</ToggleButton>
+                <ToggleButton value="ai"><SmartToyIcon fontSize="small" />&nbsp;AI 자동코스</ToggleButton>
+              </ToggleButtonGroup>
+              {planningMode === "ai" ? (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  AI 모드에서는 담아온/로드된 모든 관광지를 기반으로 <b>/generate</b>를 호출해 자동으로 일정을 짜요. 수동 선택/검색 UI는 숨겨집니다.
+                </Alert>
+              ) : (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  수동 모드에서는 왼쪽 목록에서 장소를 선택/검색해 코스를 직접 구성할 수 있어요.
+                </Alert>
+              )}
+            </Paper>
+
             {/* 이동 수단 */}
             <Paper sx={{ p: 2, mb: 2 }}>
-              <Typography fontWeight={700} sx={{ mb: 1 }}>🚗 이동 수단 선택</Typography>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                <Typography fontWeight={700}>🚗 이동 수단</Typography>
+                <Tooltip title="대중교통은 시간대/노선에 따라 달라질 수 있어요.">
+                  <InfoOutlinedIcon fontSize="small" sx={{ opacity: 0.6 }} />
+                </Tooltip>
+              </Stack>
               <Select fullWidth size="small" value={mode} onChange={(e) => setMode(e.target.value)}>
                 <MenuItem value="transit">🚇 대중교통 (추천)</MenuItem>
                 <MenuItem value="driving">🚗 자동차</MenuItem>
@@ -658,168 +675,192 @@ export default function KakaoCourseTestPage() {
               </Select>
             </Paper>
 
-            {/* 추천 코스 */}
-            <Box sx={{ mb: 2 }}>
-              <Typography fontWeight={700} sx={{ mb: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
-                ⭐ 추천 코스 (클릭하면 자동 선택)
-              </Typography>
-              <PresetTile title="클래식 부산 1일 코스" hint="해운대 → 광안리 → 감천문화마을" icon={<BeachAccessIcon />} type="classic" />
-              <PresetTile title="역사 문화 코스" hint="용두산공원 → 자갈치시장 → 태종대 (예시)" icon={<MuseumIcon />} type="history" />
-              <PresetTile title="자연 힐링 코스" hint="태종대 → 이기대 → 송도해수욕장 (예시)" icon={<LandscapeIcon />} type="nature" />
-              <PresetTile title="가족 여행 코스" hint="아쿠아리움 → 해운대 → 오륙도 (예시)" icon={<FamilyRestroomIcon />} type="family" />
-            </Box>
-
-            {/* 선택된 장소 */}
-            <Box sx={{ mb: 2 }}>
-              <Typography fontWeight={700} sx={{ mb: 1 }}>
-                📍 선택된 장소 ({selectedNames.length}개)
-              </Typography>
-              {selectedNames.length === 0 ? (
-                <Alert severity="info" sx={{ mb: 1 }}>💡 최소 2개 이상의 장소를 선택해주세요</Alert>
-              ) : null}
-              <Paper sx={{ p: 1.5, minHeight: 80 }}>
-                {selectedNames.length === 0 ? (
-                  <Typography sx={{ color: "#999", textAlign: "center" }}>장소를 선택해주세요</Typography>
-                ) : (
-                  <Stack direction="row" spacing={1} flexWrap="wrap">
-                    {selectedNames.map((nm, i) => (
-                      <Chip
-                        key={nm}
-                        label={`${i + 1}. ${nm}`}
-                        onDelete={() => removePlace(nm)}
-                        sx={{ bgcolor: "primary.main", color: "primary.contrastText" }}
-                      />
-                    ))}
-                  </Stack>
-                )}
-              </Paper>
-            </Box>
-
-            {/* 검색 */}
-            <Paper sx={{ p: 1.5, mb: 2 }}>
-              <Stack direction="row" spacing={1}>
-                <TextField
-                  fullWidth size="small" placeholder="장소명을 입력 (예: 해운대)"
-                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  InputProps={{ startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} /> }}
-                />
-                <Button variant="contained" onClick={searchAndAdd}>추가</Button>
+            {/* 일정 옵션 (수동/AI 공용) */}
+            <Paper sx={{ p: 2, mb: 2 }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                <Typography fontWeight={700}>⏱️ 일정 옵션</Typography>
+                <TuneIcon fontSize="small" />
+              </Stack>
+              <Stack spacing={1.2}>
+                <TextField type="number" size="small" label="평균 체류시간(분)" value={avgStayMins} onChange={(e)=>setAvgStayMins(Math.max(10, Number(e.target.value)||80))}/>
+                <TextField type="number" size="small" label="하루 예산(분)" value={budgetMinsPerDay} onChange={(e)=>setBudgetMinsPerDay(Math.max(120, Number(e.target.value)||480))}/>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Chip label={addMeals ? "식사추천 ON (AI에 반영)" : "식사추천 OFF"} color={addMeals ? "success" : "default"} onClick={()=>setAddMeals(v=>!v)} />
+                </Stack>
               </Stack>
             </Paper>
 
-            {/* 부산 주요 관광지 or 담아온 목록 */}
-            <Box sx={{ mb: 2 }}>
-              <Typography fontWeight={700} sx={{ mb: 1 }}>
-                🏛️ {Array.isArray(location.state?.spots) && location.state.spots.length
-                  ? "담아온 관광지 (클릭해서 선택)"
-                  : "부산 주요 관광지"}
-              </Typography>
-              {loadingPlaces ? (
-                <Paper sx={{ p: 2, textAlign: "center" }}>
-                  <CircularProgress size={22} sx={{ mr: 1 }} /> 불러오는 중...
-                </Paper>
-              ) : places.length === 0 ? (
-                <Paper sx={{ p: 2, textAlign: "center", color: "#999" }}>장소가 없습니다</Paper>
-              ) : (
-                <Box>
-                  {places.map((p) => (<PlaceItem key={p.id || p.name} place={p} />))}
+            {/* ───────── 수동 모드 전용 UI ───────── */}
+            {planningMode === "manual" && (
+              <>
+                {/* 프리셋(수동에 도움) */}
+                <Box sx={{ mb: 2 }}>
+                  <Typography fontWeight={700} sx={{ mb: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
+                    ⭐ 추천 코스 (클릭하면 자동 선택)
+                  </Typography>
+                  <PresetTile title="클래식 부산 1일 코스" hint="해운대 → 광안리 → 감천문화마을" icon={<BeachAccessIcon />} type="classic" />
+                  <PresetTile title="역사 문화 코스" hint="용두산공원 → 자갈치시장 → 태종대 (예시)" icon={<MuseumIcon />} type="history" />
+                  <PresetTile title="자연 힐링 코스" hint="태종대 → 이기대 → 송도해수욕장 (예시)" icon={<LandscapeIcon />} type="nature" />
+                  <PresetTile title="가족 여행 코스" hint="아쿠아리움 → 해운대 → 오륙도 (예시)" icon={<FamilyRestroomIcon />} type="family" />
                 </Box>
-              )}
-              {!!placesError && <Alert severity="warning" sx={{ mt: 1 }}>{placesError}</Alert>}
-            </Box>
 
-            {/* 버튼들 */}
-            <Box sx={{ mb: 2 }}>
-              <Button
-                fullWidth variant="contained" startIcon={<DirectionsIcon />}
-                disabled={generating || selectedNames.length < 2 || !kakaoLoaded}
-                onClick={generateRoute}
-                sx={{ mb: 1, py: 1.2 }}
-              >
-                {generating ? "경로 생성 중…" : "🗺️ 경로 생성하기 (자동으로 N일차에 추가)"}
-              </Button>
-              <Button fullWidth variant="outlined" startIcon={<RestartAltIcon />} onClick={clearSelection} sx={{ py: 1.2 }}>
-                🔄 선택 초기화
-              </Button>
-            </Box>
-
-            {/* 🗓️ 누적 일정 */}
-            <Box sx={{ mb: 2 }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-                <Typography fontWeight={700}>🗓️ 내 일정 ({dayRecords.length}일차)</Typography>
-                <Button size="small" onClick={clearAllDays} disabled={!dayRecords.length} startIcon={<DeleteOutlineIcon />}>전체 삭제</Button>
-              </Stack>
-              {dayRecords.length === 0 ? (
-                <Paper sx={{ p: 2, color: "text.secondary" }}>
-                  아직 추가된 일정이 없습니다. 경로 생성 시 1일차부터 자동으로 쌓입니다.
-                </Paper>
-              ) : (
-                <Stack spacing={1}>
-                  {dayRecords.map((rec, idx) => (
-                    <Paper key={idx} sx={{ p: 1.25, borderLeft: "4px solid #667eea" }}>
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
-                        <Typography fontWeight={800}>{rec.day}일차</Typography>
-                        <Stack direction="row" spacing={1}>
-                          <IconButton size="small" title="이 일차 경로 지도에서 보기" onClick={() => focusDayOnMap(idx)}>
-                            <VisibilityIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton size="small" title="이 일차를 선택 목록으로 불러오기" onClick={() => reAddSelectionFromDay(idx)}>
-                            <ReplayIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton size="small" title="이 일차 삭제" onClick={() => deleteDay(idx)}>
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
-                        </Stack>
+                {/* 선택된 장소 (수동) */}
+                <Box sx={{ mb: 2 }}>
+                  <Typography fontWeight={700} sx={{ mb: 1 }}>📍 선택된 장소 ({selectedNames.length}개)</Typography>
+                  {selectedNames.length === 0 ? (<Alert severity="info" sx={{ mb: 1 }}>💡 최소 2개 이상의 장소를 선택해주세요</Alert>) : null}
+                  <Paper sx={{ p: 1.5, minHeight: 80 }}>
+                    {selectedNames.length === 0 ? (
+                      <Typography sx={{ color: "#999", textAlign: "center" }}>장소를 선택해주세요</Typography>
+                    ) : (
+                      <Stack direction="row" spacing={1} flexWrap="wrap">
+                        {selectedNames.map((nm, i) => (<Chip key={nm} label={`${i + 1}. ${nm}`} onDelete={() => removePlace(nm)} sx={{ bgcolor: "primary.main", color: "primary.contrastText" }} />))}
                       </Stack>
-                      <Typography variant="body2" sx={{ mb: 0.5 }}>
-                        {rec.names.map((n, i) => `${i + 1}. ${n}`).join("  ·  ")}
-                      </Typography>
-                      {Array.isArray(rec.route?.segments) && (
-                        <Typography variant="caption" color="text.secondary">
-                          총 {rec.route.segments.length}구간 · {Math.round((rec.route.segments||[]).reduce((s,v)=>s+(v.duration_minutes||0),0))}분 · {(rec.route.segments||[]).reduce((s,v)=>s+(v.distance_km||0),0).toFixed(1)}km
-                        </Typography>
-                      )}
-                    </Paper>
-                  ))}
-                </Stack>
-              )}
-            </Box>
+                    )}
+                  </Paper>
+                </Box>
 
-            {/* 경로 정보 (현재 보기) */}
+                {/* 검색(수동) */}
+                <Paper sx={{ p: 1.5, mb: 2 }}>
+                  <Stack direction="row" spacing={1}>
+                    <TextField fullWidth size="small" placeholder="장소명을 입력 (예: 해운대)" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} InputProps={{ startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} /> }} />
+                    <Button variant="contained" onClick={searchAndAdd}>추가</Button>
+                  </Stack>
+                </Paper>
+
+                {/* 장소 리스트 */}
+                <Box sx={{ mb: 2 }}>
+                  <Typography fontWeight={700} sx={{ mb: 1 }}>
+                    🏛️ {Array.isArray(location.state?.spots) && location.state.spots.length ? "담아온 관광지 (클릭해서 선택)" : "부산 주요 관광지"}
+                  </Typography>
+                  {loadingPlaces ? (
+                    <Paper sx={{ p: 2, textAlign: "center" }}><CircularProgress size={22} sx={{ mr: 1 }} /> 불러오는 중...</Paper>
+                  ) : places.length === 0 ? (
+                    <Paper sx={{ p: 2, textAlign: "center", color: "#999" }}>장소가 없습니다</Paper>
+                  ) : (
+                    <Box>{places.map((p) => (<PlaceItem key={p.id || p.name} place={p} />))}</Box>
+                  )}
+                  {!!placesError && <Alert severity="warning" sx={{ mt: 1, whiteSpace: "pre-line" }}>{placesError}</Alert>}
+                </Box>
+
+                {/* 수동 액션 */}
+                <Box sx={{ mb: 2 }}>
+                  <Button
+                    fullWidth variant="contained" startIcon={<HandymanIcon />}
+                    disabled={generating || selectedNames.length < 2 || !kakaoLoaded}
+                    onClick={generateRoute}
+                    sx={{ mb: 1, py: 1.2 }}
+                  >
+                    {generating ? "경로 생성 중…" : "직접 코스 짜기 (선택한 장소로)"}
+                  </Button>
+
+                  <Button fullWidth variant="outlined" startIcon={<RestartAltIcon />} onClick={clearSelection} sx={{ py: 1.2 }}>
+                    🔄 선택 초기화
+                  </Button>
+                </Box>
+
+                {/* 수동 일정 누적 */}
+                <Box sx={{ mb: 2 }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                    <Typography fontWeight={700}>🗓️ 내 일정 ({dayRecords.length}일차)</Typography>
+                    <Button size="small" onClick={clearAllDays} disabled={!dayRecords.length} startIcon={<DeleteOutlineIcon />}>전체 삭제</Button>
+                  </Stack>
+                  {dayRecords.length === 0 ? (
+                    <Paper sx={{ p: 2, color: "text.secondary" }}>아직 추가된 일정이 없습니다. 경로 생성 시 1일차부터 자동으로 쌓입니다.</Paper>
+                  ) : (
+                    <Stack spacing={1}>
+                      {dayRecords.map((rec, idx) => (
+                        <Paper key={idx} sx={{ p: 1.25, borderLeft: "4px solid #667eea" }}>
+                          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                            <Typography fontWeight={800}>{rec.day}일차</Typography>
+                            <Stack direction="row" spacing={1}>
+                              <IconButton size="small" title="이 일차 경로 지도에서 보기" onClick={() => focusDayOnMap(idx)}><VisibilityIcon fontSize="small" /></IconButton>
+                              <IconButton size="small" title="이 일차를 선택 목록으로 불러오기" onClick={() => reAddSelectionFromDay(idx)}><ReplayIcon fontSize="small" /></IconButton>
+                              <IconButton size="small" title="이 일차 삭제" onClick={() => deleteDay(idx)}><DeleteOutlineIcon fontSize="small" /></IconButton>
+                            </Stack>
+                          </Stack>
+                          <Typography variant="body2" sx={{ mb: 0.5 }}>{rec.names.map((n, i) => `${i + 1}. ${n}`).join("  ·  ")}</Typography>
+                          {Array.isArray(rec.route?.segments) && (
+                            <Typography variant="caption" color="text.secondary">
+                              총 {rec.route.segments.length}구간 · {Math.round((rec.route.segments||[]).reduce((s,v)=>s+(v.duration_minutes||0),0))}분 · {(rec.route.segments||[]).reduce((s,v)=>s+(v.distance_km||0),0).toFixed(1)}km
+                            </Typography>
+                          )}
+                        </Paper>
+                      ))}
+                    </Stack>
+                  )}
+                </Box>
+              </>
+            )}
+
+            {/* ───────── AI 모드 전용 UI ───────── */}
+            {planningMode === "ai" && (
+              <>
+                {/* AI 실행 버튼 */}
+                <Box sx={{ mb: 2 }}>
+                  <Button
+                    fullWidth color="secondary" variant="contained" startIcon={<SmartToyIcon />}
+                    disabled={aiGenerating || !kakaoLoaded || (loadingPlaces && !(location.state?.spots?.length))}
+                    onClick={handleGenerateAIFromCaptured}
+                    sx={{ mb: 1, py: 1.2 }}
+                  >
+                    {aiGenerating ? "AI 코스 생성 중…" : "AI로 자동코스 추천 (담아온 관광지 + 옵션 반영)"}
+                  </Button>
+                </Box>
+
+                {/* 🤖 AI 추천 일정 카드: '직접 코스' 모드에서는 보이지 않도록 조건부 렌더링 */}
+                {aiPlan?.dailySchedule?.length > 0 && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography fontWeight={700} sx={{ mb: 1 }}>🤖 AI 추천 일정</Typography>
+                    {aiPlan.dailySchedule.map((day, di) => (
+                      <Paper key={di} sx={{ p: 1.5, mb: 1.5, borderLeft: `6px solid ${dayColor(di)}` }}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: .5 }}>
+                          <Typography fontWeight={800} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <MapOutlinedIcon fontSize="small" /> {day.day}일차
+                          </Typography>
+                          <Button size="small" variant="outlined" onClick={() => drawAIDayOnMap(di)} startIcon={<VisibilityIcon fontSize="small" />}>
+                            지도로 보기
+                          </Button>
+                        </Stack>
+                        <Stack spacing={1}>
+                          {day.places?.map((p, pi) => (
+                            <Box key={`${di}-${pi}`} sx={{ pl: 0.5 }}>
+                              <Typography sx={{ fontWeight: 800, mb: .2 }}>{pi + 1}. {p.name}</Typography>
+                              {!!p.address && <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.4 }}>{p.address}</Typography>}
+                              <Stack direction="row" spacing={2} sx={{ mt: .2 }}>
+                                {!!p.time && <Typography variant="body2">🎯 {p.time}</Typography>}
+                                {!!p.estimated_duration && <Typography variant="body2">⏱️ 예상 소요시간: {p.estimated_duration}분</Typography>}
+                              </Stack>
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Paper>
+                    ))}
+                  </Box>
+                )}
+              </>
+            )}
+
+            {/* 현재 경로 상세(수동/AI 공용) */}
             {routeData && (
               <Box id="route-info" sx={{ mb: 2 }}>
                 <Typography fontWeight={700} sx={{ mb: 1 }}>📊 현재 경로 정보</Typography>
                 <Box id="route-segments">
                   {(routeData.segments || []).map((seg, idx) => (
-                    <Paper
-                      key={idx}
-                      sx={{ p: 1.5, mb: 1, borderLeft: `5px solid ${seg.color || "#667eea"}`, borderRadius: 1 }}
-                    >
-                      <Typography sx={{ fontWeight: 700, mb: 0.5 }}>
-                        {idx + 1}. {seg.from_place} → {seg.to_place}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        📏 {seg.distance_km} km | ⏱️ {Math.round(seg.duration_minutes)}분
-                      </Typography>
-
-                      {Array.isArray(seg.steps) && seg.steps.length > 0 && (
+                    <Paper key={idx} sx={{ p: 1.5, mb: 1, borderLeft: `5px solid ${seg.color || "#667eea"}`, borderRadius: 1 }}>
+                      <Typography sx={{ fontWeight: 700, mb: 0.5 }}>{idx + 1}. {seg.from_place} → {seg.to_place}</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>📏 {seg.distance_km} km | ⏱️ {Math.round(seg.duration_minutes)}분</Typography>
+                      {!!seg.steps?.length && (
                         <Box sx={{ p: 1, bgcolor: "#f8f9fa", borderRadius: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5, color: "text.primary" }}>
-                            📋 상세 경로
-                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5, color: "text.primary" }}>📋 상세 경로</Typography>
                           <Stack spacing={1}>
                             {seg.steps.map((st, j) => {
                               if (st.travel_mode === "TRANSIT" && st.transit_details) {
                                 const t = st.transit_details;
                                 return (
                                   <Paper key={j} sx={{ p: 1 }}>
-                                    <Typography fontWeight={700} color="primary">
-                                      {vehicleIcon(t.vehicle_type)} {t.line_short_name || t.line_name}
-                                      {t.headsign ? ` (${t.headsign} 방면)` : ""}
-                                    </Typography>
+                                    <Typography fontWeight={700} color="primary">{vehicleIcon(t.vehicle_type)} {t.line_short_name || t.line_name}{t.headsign ? ` (${t.headsign} 방면)` : ""}</Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                      {t.departure_stop} → {t.arrival_stop}
-                                      {t.num_stops ? ` (${t.num_stops}개 정류장)` : ""} · ⏱️ {st.duration} · 📏 {st.distance}
+                                      {t.departure_stop} → {t.arrival_stop}{t.num_stops ? ` (${t.num_stops}개 정류장)` : ""} · ⏱️ {st.duration} · 📏 {st.distance}
                                     </Typography>
                                   </Paper>
                                 );
@@ -828,12 +869,8 @@ export default function KakaoCourseTestPage() {
                                 return (
                                   <Paper key={j} sx={{ p: 1 }}>
                                     <Typography fontWeight={700} color="success.main">🚶 도보</Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                      {stripHTML(st.instruction || "")}
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                      ⏱️ {st.duration} · 📏 {st.distance}
-                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">{stripHTML(st.instruction || "")}</Typography>
+                                    <Typography variant="body2" color="text.secondary">⏱️ {st.duration} · 📏 {st.distance}</Typography>
                                   </Paper>
                                 );
                               }
@@ -844,7 +881,6 @@ export default function KakaoCourseTestPage() {
                       )}
                     </Paper>
                   ))}
-
                   <Alert severity="success" sx={{ mt: 1 }}>
                     <strong>📊 총 거리:</strong> {totalDist.toFixed(1)}km &nbsp;|&nbsp;
                     <strong>⏱️ 총 소요시간:</strong> {Math.round(totalMins)}분 (약 {Math.round(totalMins / 60)}시간)
@@ -857,53 +893,29 @@ export default function KakaoCourseTestPage() {
 
         {/* 지도 */}
         <Grid item xs={12} md={8} lg={8}>
-          <Box
-            sx={{
-              position: "relative",
-              bgcolor: "#e9ecef",
-              height: mapFull ? "calc(100vh - 100px)" : { xs: 520, md: "calc(100vh - 180px)" },
-              transition: "height .2s ease",
-            }}
-          >
+          <Box sx={{ position: "relative", bgcolor: "#e9ecef", height: mapFull ? "calc(100vh - 100px)" : { xs: 520, md: "calc(100vh - 180px)" }, transition: "height .2s ease" }}>
             <Box sx={{ p: 1.5, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <Stack direction="row" spacing={1} alignItems="center">
                 <MapIcon />
                 <Typography fontWeight={700}>지도</Typography>
                 {!!routeData?.markers?.length && (
-                  <Typography variant="body2" color="text.secondary">
-                    · 마커 {routeData.markers.length}개 / 구간 {routeData.segments?.length || 0}개
-                  </Typography>
+                  <Typography variant="body2" color="text.secondary">· 마커 {routeData.markers.length}개 / 구간 {routeData.segments?.length || 0}개</Typography>
                 )}
               </Stack>
-
               <Stack direction="row" spacing={1}>
                 <IconButton size="small" onClick={() => setMapFull((v) => !v)} title={mapFull ? "지도 축소" : "지도 크게 보기"}>
                   {mapFull ? <FullscreenExitIcon /> : <FullscreenIcon />}
                 </IconButton>
-                <IconButton size="small" onClick={() => (setRouteData(null), clearMap())}>
+                <IconButton size="small" onClick={() => (setRouteData(null), clearMap())} title="지도 지우기">
                   <CloseIcon />
                 </IconButton>
               </Stack>
             </Box>
             <Divider />
-            <Box
-              ref={mapElRef}
-              sx={{
-                width: "100%",
-                height: "calc(100% - 56px)", // 헤더 높이만큼 뺌
-                borderRadius: 2,
-                overflow: "hidden",
-                bgcolor: "#e9ecef",
-              }}
-            />
+            <Box ref={mapElRef} sx={{ width: "100%", height: "calc(100% - 56px)", borderRadius: 2, overflow: "hidden", bgcolor: "#e9ecef" }} />
             {!kakaoLoaded && !sdkError && (
-              <Box sx={{
-                position: "absolute", inset: 0, display: "flex",
-                alignItems: "center", justifyContent: "center",
-              }}>
-                <Alert severity="info" icon={<CircularProgress size={14} />}>
-                  카카오맵 SDK 로딩 중…
-                </Alert>
+              <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Alert severity="info" icon={<CircularProgress size={14} />}>카카오맵 SDK 로딩 중…</Alert>
               </Box>
             )}
             {!!sdkError && (
@@ -914,6 +926,8 @@ export default function KakaoCourseTestPage() {
           </Box>
         </Grid>
       </Grid>
+
+      <Snackbar open={toast.open} autoHideDuration={2500} onClose={() => setToast({ ...toast, open: false })} message={toast.msg} />
     </Box>
   );
 }
