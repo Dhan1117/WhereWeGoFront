@@ -273,13 +273,18 @@ const DetailTooltipTitle = (p) => (
 );
 
 function BigChoiceCardInner({ label, place, selected, onSelect, compact = false, disabled = false }) {
-  const [src, setSrc] = useState("");
-  const [imgLoaded, setImgLoaded] = useState(false);
-  useEffect(() => {
+  const [src, setSrc] = React.useState("");
+  const [imgLoaded, setImgLoaded] = React.useState(false);
+
+  React.useEffect(() => {
     const url = extractPhotoUrl(place) || PLACEHOLDER_URL;
     setImgLoaded(false);
     setSrc(url);
   }, [place]);
+
+  const handleSelect = React.useCallback(() => {
+    if (!disabled) onSelect();
+  }, [disabled, onSelect]);
 
   return (
     <Badge
@@ -302,9 +307,9 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
             role="button"
             tabIndex={0}
             aria-disabled={disabled}
-            onKeyDown={(e) => !disabled && ((e.key === "Enter" || e.key === " ") && onSelect())}
+            onKeyDown={(e) => !disabled && ((e.key === "Enter" || e.key === " ") && handleSelect())}
             variant="outlined"
-            onClick={() => !disabled && onSelect()}
+            onClick={handleSelect}   
             sx={{
               outline: "none",
               borderWidth: 2,
@@ -325,13 +330,8 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
             }}
           >
             <CardContent sx={{ p: compact ? { xs: 1.5, sm: 2 } : { xs: 2, sm: 2.5, md: 3 }, flex: 1 }}>
-              <Stack
-                direction="row"
-                alignItems="flex-start"
-                spacing={{ xs: 0.75, sm: 1.25 }}
-                sx={{ mb: { xs: 0.75, sm: 1 } }}
-              >
-                <PlaceIcon sx={{ color: tone.primary, mt: "3px", fontSize: { xs: 18, sm: 22 } }} />
+              <Stack direction="row" alignItems="flex-start" spacing={{ xs: 0.75, sm: 1.25 }} sx={{ mb: { xs: 0.75, sm: 1 } }}>
+                <PlaceIcon sx={{ color: tone.primary, mt: "3px", fontSize: { xs: 18, sm: 22 }, pointerEvents: "none" }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="h6" fontWeight={900} noWrap sx={{ fontSize: { xs: "0.95rem", sm: "1.1rem" } }}>
                     {compact ? label + " · " : ""}{place?.name || "-"}
@@ -343,25 +343,26 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
                     🏷️ {place?.category || "-"} · ⭐ {place?.rating ?? "N/A"}
                   </Typography>
                 </Box>
-                <Tooltip
-                  title={DetailTooltipTitle(place)}
-                  arrow
-                  placement="left"
-                  componentsProps={{ tooltip: { sx: { maxWidth: 320 } } }}
-                >
-                  <IconButton
-                    type="button"
-                    size="small"
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="상세보기"
-                    sx={{ p: { xs: 0.5, sm: 0.75 } }}
-                  >
-                    <SearchIcon sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }} />
-                  </IconButton>
+
+                {/* 상세보기 아이콘만 클릭 막음 */}
+                <Tooltip title={DetailTooltipTitle(place)} arrow placement="left" componentsProps={{ tooltip: { sx: { maxWidth: 320 } } }}>
+                  <span>
+                    <IconButton
+                      type="button"
+                      size="small"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="상세보기"
+                      sx={{ p: { xs: 0.5, sm: 0.75 } }}
+                    >
+                      <SearchIcon sx={{ fontSize: { xs: "1rem", sm: "1.25rem" } }} />
+                    </IconButton>
+                  </span>
                 </Tooltip>
               </Stack>
 
+              {/* ✅ 이미지 박스도 클릭 */}
               <Box
+                onClick={handleSelect}
                 sx={{
                   mt: { xs: 0.75, sm: 1.25 },
                   borderRadius: { xs: 1.5, sm: 2.5 },
@@ -369,10 +370,16 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
                   bgcolor: "#eef2f7",
                   position: "relative",
                   aspectRatio: "16/9",
+                  cursor: disabled ? "not-allowed" : "pointer",
                 }}
               >
                 {!imgLoaded && (
-                  <Skeleton variant="rectangular" width="100%" height="100%" sx={{ position: "absolute", inset: 0 }} />
+                  <Skeleton
+                    variant="rectangular"
+                    width="100%"
+                    height="100%"
+                    sx={{ position: "absolute", inset: 0, pointerEvents: "none" }} 
+                  />
                 )}
                 <img
                   src={src}
@@ -382,7 +389,6 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
                   style={{ display: imgLoaded ? "block" : "none", width: "100%", height: "100%", objectFit: "cover" }}
                   onLoad={() => setImgLoaded(true)}
                   onError={(e) => { e.currentTarget.src = PLACEHOLDER_URL; setImgLoaded(true); }}
-                  onClick={(e) => e.stopPropagation()}
                 />
               </Box>
             </CardContent>
@@ -392,6 +398,7 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
     </Badge>
   );
 }
+
 const BigChoiceCard = React.memo(BigChoiceCardInner);
 
 /* ==========================================================================
