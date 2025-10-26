@@ -972,12 +972,7 @@ export default function SurveyPage() {
                         >
                           Kakao 로그인
                         </Button>
-                        <Button type="button" variant="outlined" onClick={adminBypassLogin} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>
-                          관리자 로그인(로컬)
-                        </Button>
-                        <Button type="button" variant="text" onClick={continueWithoutLogin} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>
-                          로그인 없이 진행
-                        </Button>
+        
                       </Stack>
                     </CardContent>
                     <CardActions sx={{ justifyContent: "space-between", px: 2, pb: 2 }}>
