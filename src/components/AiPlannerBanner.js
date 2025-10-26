@@ -11,7 +11,7 @@ export default function AiPlannerBanner() {
     () => [
       { src: "/image/HaeundaeBeach.jpg", alt: "해운대 해수욕장 전경", caption: "끝없이 펼쳐진 모래사장, 해운대" },
       { src: "/image/gwangalli_beach.jpg", alt: "광안리 야경과 광안대교", caption: "밤이 더 빛나는 광안리" },
-      { src: "/image/gamcheon.jpg", alt: "감천문화마을 전경", caption: "알록달록 감천문화마을" },
+      { src: "/image/Gamcheon.jpg", alt: "감천문화마을 전경", caption: "알록달록 감천문화마을" },
       { src: "/image/JagalchiMarket.jpg", alt: "자갈치 시장 풍경", caption: "부산의 미각, 자갈치 시장" },
     ],
     []

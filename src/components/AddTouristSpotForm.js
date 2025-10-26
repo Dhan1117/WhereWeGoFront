@@ -1,23 +1,9 @@
+// src/components/AddTouristSpotForm.js
 import React, { useState } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Button,
-  Box,
-  Typography,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Chip,
-  Alert,
-  CircularProgress,
-  Paper,
-  IconButton,
-  Grid
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Box, Typography,
+  FormControl, InputLabel, Select, MenuItem, Chip, Alert, CircularProgress, Paper,
+  IconButton, Grid
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
@@ -25,6 +11,49 @@ import {
   PhotoCamera as PhotoCameraIcon,
   Delete as DeleteIcon
 } from '@mui/icons-material';
+
+// ---- API BASE: 환경변수 우선, 없으면 Vite 변수들, 없으면 현재 origin ----
+const RAW_BASE =
+  process.env.REACT_APP_API_PREFIX ||
+  (typeof import.meta !== 'undefined' &&
+    import.meta.env &&
+    (import.meta.env.VITE_API_PREFIX || import.meta.env.VITE_API_BASE_URL)) ||
+  window.location.origin;
+
+const API_BASE = RAW_BASE.replace(/\/$/, ''); // 끝 슬래시 제거
+const API_V1 = `${API_BASE}/api/v1`;
+
+// 여러 후보 URL을 순서대로 시도 (프록시 사용시 /api/v1 도 동작하게)
+async function tryPost(urls, formData) {
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        // multipart/form-data는 Content-Type을 직접 설정하지 말 것!
+        body: formData,
+        credentials: 'include', // 세션 사용하는 백엔드라면 유지, 필요 없으면 'omit'
+      });
+      if (!res.ok) {
+        // 응답을 텍스트/JSON 시도해서 의미있는 에러 표시
+        let detail = '';
+        try {
+          const maybeJson = await res.json();
+          detail = maybeJson?.detail || maybeJson?.message || '';
+        } catch {
+          try { detail = await res.text(); } catch {}
+        }
+        const err = new Error(`HTTP ${res.status}${detail ? `: ${detail}` : ''}`);
+        err.status = res.status;
+        throw err;
+      }
+      return await res.json();
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('업로드 엔드포인트를 찾지 못했습니다.');
+}
 
 const AddTouristSpotForm = ({ open, onClose }) => {
   const [formData, setFormData] = useState({
@@ -35,7 +64,7 @@ const AddTouristSpotForm = ({ open, onClose }) => {
     userEmail: '',
     userName: ''
   });
-  
+
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -43,15 +72,12 @@ const AddTouristSpotForm = ({ open, onClose }) => {
   const [dragActive, setDragActive] = useState(false);
 
   const categories = [
-    '공연관람', '예술 감상', '관람및체험', '자연산림', 
+    '공연관람', '예술 감상', '관람및체험', '자연산림',
     '자연풍경', '테마거리', '트레킹', '휴양'
   ];
 
   const handleInputChange = (field) => (event) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: event.target.value
-    }));
+    setFormData(prev => ({ ...prev, [field]: event.target.value }));
     setError('');
   };
 
@@ -79,18 +105,14 @@ const AddTouristSpotForm = ({ open, onClose }) => {
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
+    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
+    else if (e.type === 'dragleave') setDragActive(false);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleImageUpload(e.dataTransfer.files);
     }
@@ -99,22 +121,17 @@ const AddTouristSpotForm = ({ open, onClose }) => {
   const removeImage = (imageId) => {
     setImages(prev => {
       const updated = prev.filter(img => img.id !== imageId);
-      // 메모리 누수 방지를 위해 URL 해제
-      const removedImage = prev.find(img => img.id === imageId);
-      if (removedImage) {
-        URL.revokeObjectURL(removedImage.preview);
-      }
+      const removed = prev.find(img => img.id === imageId);
+      if (removed) URL.revokeObjectURL(removed.preview);
       return updated;
     });
   };
 
   const handleSubmit = async () => {
-    // 필수 필드 검증
     if (!formData.name.trim()) {
       setError('관광지 이름을 입력해주세요.');
       return;
     }
-    
     if (images.length === 0) {
       setError('최소 1개의 이미지를 업로드해주세요.');
       return;
@@ -124,41 +141,28 @@ const AddTouristSpotForm = ({ open, onClose }) => {
     setError('');
 
     try {
-      const submitFormData = new FormData();
-      
-      // 기본 정보 추가
-      submitFormData.append('name', formData.name);
-      submitFormData.append('category', formData.category);
-      submitFormData.append('description', formData.description);
-      submitFormData.append('address', formData.address);
-      submitFormData.append('user_email', formData.userEmail);
-      submitFormData.append('user_name', formData.userName);
-      
-      // 이미지 파일들 추가
-      images.forEach((image, index) => {
-        submitFormData.append('images', image.file);
-      });
+      const fd = new FormData();
+      fd.append('name', formData.name);
+      fd.append('category', formData.category);
+      fd.append('description', formData.description);
+      fd.append('address', formData.address);
+      fd.append('user_email', formData.userEmail);
+      fd.append('user_name', formData.userName);
+      images.forEach(img => fd.append('images', img.file));
 
-      const response = await fetch('http://localhost:8000/api/v1/tourist-requests/submit', {
-        method: 'POST',
-        body: submitFormData,
-      });
+      // 후보 엔드포인트 (환경/프록시 모두 대응)
+      const urls = [
+        `${API_V1}/tourist-requests/submit`,
+        `${API_BASE}/api/v1/tourist-requests/submit`,
+        `${window.location.origin.replace(/\/$/, '')}/api/v1/tourist-requests/submit`,
+      ];
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || '등록 요청 중 오류가 발생했습니다.');
-      }
-
-      const result = await response.json();
+      const result = await tryPost(urls, fd);
       console.log('등록 성공:', result);
-      
       setSuccess(true);
-      
-      // 3초 후 폼 리셋 및 닫기
-      setTimeout(() => {
-        handleClose();
-      }, 2000);
 
+      // 2초 후 폼 리셋 및 닫기
+      setTimeout(() => { handleClose(); }, 2000);
     } catch (err) {
       console.error('등록 오류:', err);
       setError(err.message || '등록 요청 중 오류가 발생했습니다.');
@@ -168,12 +172,7 @@ const AddTouristSpotForm = ({ open, onClose }) => {
   };
 
   const handleClose = () => {
-    // 메모리 누수 방지
-    images.forEach(image => {
-      URL.revokeObjectURL(image.preview);
-    });
-    
-    // 폼 리셋
+    images.forEach(image => URL.revokeObjectURL(image.preview));
     setFormData({
       name: '',
       category: '',
@@ -186,7 +185,6 @@ const AddTouristSpotForm = ({ open, onClose }) => {
     setError('');
     setSuccess(false);
     setLoading(false);
-    
     onClose();
   };
 
@@ -208,21 +206,14 @@ const AddTouristSpotForm = ({ open, onClose }) => {
   }
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={handleClose} 
-      maxWidth="md" 
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: { borderRadius: 2 }
-      }}
+      PaperProps={{ sx: { borderRadius: 2 } }}
     >
-      <DialogTitle sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        pb: 1
-      }}>
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
         <Typography variant="h5" component="span" fontWeight="bold">
           새로운 관광지 등록
         </Typography>
@@ -231,23 +222,20 @@ const AddTouristSpotForm = ({ open, onClose }) => {
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers={true}>
+      <DialogContent dividers>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          
-          {/* 에러 메시지 */}
           {error && (
             <Alert severity="error" onClose={() => setError('')}>
               {error}
             </Alert>
           )}
 
-          {/* 이미지 업로드 섹션 */}
+          {/* 이미지 업로드 */}
           <Box>
             <Typography variant="h6" gutterBottom>
               이미지 업로드 <Chip label="필수" size="small" color="error" />
             </Typography>
-            
-            {/* 드래그 앤 드롭 영역 */}
+
             <Paper
               sx={{
                 border: `2px dashed ${dragActive ? '#1976d2' : '#ccc'}`,
@@ -257,10 +245,7 @@ const AddTouristSpotForm = ({ open, onClose }) => {
                 backgroundColor: dragActive ? '#f3f7ff' : '#fafafa',
                 cursor: 'pointer',
                 transition: 'all 0.3s ease',
-                '&:hover': {
-                  borderColor: '#1976d2',
-                  backgroundColor: '#f3f7ff'
-                }
+                '&:hover': { borderColor: '#1976d2', backgroundColor: '#f3f7ff' }
               }}
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
@@ -278,14 +263,13 @@ const AddTouristSpotForm = ({ open, onClose }) => {
               <input
                 id="image-upload-input"
                 type="file"
-                multiple={true}
+                multiple
                 accept="image/*"
                 style={{ display: 'none' }}
                 onChange={(e) => handleImageUpload(e.target.files)}
               />
             </Paper>
 
-            {/* 업로드된 이미지 미리보기 */}
             {images.length > 0 && (
               <Grid container spacing={2} sx={{ mt: 2 }}>
                 {images.map((image) => (
@@ -294,11 +278,7 @@ const AddTouristSpotForm = ({ open, onClose }) => {
                       <img
                         src={image.preview}
                         alt="미리보기"
-                        style={{
-                          width: '100%',
-                          height: '120px',
-                          objectFit: 'cover'
-                        }}
+                        style={{ width: '100%', height: '120px', objectFit: 'cover' }}
                       />
                       <IconButton
                         sx={{
@@ -328,12 +308,12 @@ const AddTouristSpotForm = ({ open, onClose }) => {
             label="관광지 이름"
             value={formData.name}
             onChange={handleInputChange('name')}
-            required={true}
-            fullWidth={true}
+            required
+            fullWidth
             placeholder="예: 해운대 해수욕장"
           />
 
-          <FormControl fullWidth={true}>
+          <FormControl fullWidth>
             <InputLabel>카테고리</InputLabel>
             <Select
               value={formData.category}
@@ -352,9 +332,9 @@ const AddTouristSpotForm = ({ open, onClose }) => {
             label="상세 설명"
             value={formData.description}
             onChange={handleInputChange('description')}
-            multiline={true}
+            multiline
             rows={4}
-            fullWidth={true}
+            fullWidth
             placeholder="관광지에 대한 자세한 설명을 입력해주세요..."
           />
 
@@ -362,11 +342,11 @@ const AddTouristSpotForm = ({ open, onClose }) => {
             label="주소"
             value={formData.address}
             onChange={handleInputChange('address')}
-            fullWidth={true}
+            fullWidth
             placeholder="예: 부산광역시 해운대구 해운대해변로 264"
           />
 
-          {/* 사용자 정보 (선택사항) */}
+          {/* 사용자 정보 (선택) */}
           <Box>
             <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
               연락처 정보 (선택사항)
@@ -377,7 +357,7 @@ const AddTouristSpotForm = ({ open, onClose }) => {
                   label="이름"
                   value={formData.userName}
                   onChange={handleInputChange('userName')}
-                  fullWidth={true}
+                  fullWidth
                   placeholder="등록자 이름"
                 />
               </Grid>
@@ -387,26 +367,21 @@ const AddTouristSpotForm = ({ open, onClose }) => {
                   type="email"
                   value={formData.userEmail}
                   onChange={handleInputChange('userEmail')}
-                  fullWidth={true}
+                  fullWidth
                   placeholder="example@email.com"
                 />
               </Grid>
             </Grid>
           </Box>
-
         </Box>
       </DialogContent>
 
       <DialogActions sx={{ p: 3, gap: 1 }}>
-        <Button 
-          onClick={handleClose} 
-          variant="outlined"
-          disabled={loading}
-        >
+        <Button onClick={handleClose} variant="outlined" disabled={loading}>
           취소
         </Button>
-        <Button 
-          onClick={handleSubmit} 
+        <Button
+          onClick={handleSubmit}
           variant="contained"
           disabled={loading || !formData.name.trim() || images.length === 0}
           startIcon={loading ? <CircularProgress size={20} /> : <PhotoCameraIcon />}

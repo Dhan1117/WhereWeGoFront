@@ -734,17 +734,8 @@ export default function TravelPlanKakaoPage() {
             {/* ───────── 수동 모드 전용 UI ───────── */}
             {planningMode === "manual" && (
               <>
-                {/* 프리셋 */}
-                <Box sx={{ mb: 2 }}>
-                  <Typography fontWeight={700} sx={{ mb: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
-                    ⭐ 추천 코스 (클릭하면 자동 선택)
-                  </Typography>
-
-                  <PresetTile title="클래식 부산 1일 코스" icon={<BeachAccessIcon />} type="classic" />
-                  <PresetTile title="역사 문화 코스" icon={<MuseumIcon />} type="history" />
-                  <PresetTile title="자연 힐링 코스" icon={<LandscapeIcon />} type="nature" />
-                  <PresetTile title="가족 여행 코스" icon={<FamilyRestroomIcon />} type="family" />
-                </Box>
+              
+            
 
 
                 {/* 선택된 장소 */}

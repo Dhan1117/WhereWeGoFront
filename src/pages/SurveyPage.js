@@ -856,7 +856,7 @@ export default function SurveyPage() {
               variant="body1"
               sx={{ opacity: 0.8, mt: 0.5, fontSize: { xs: "0.75rem", sm: "0.85rem", md: "1rem" }, display: { xs: "none", sm: "block" } }}
             >
-            
+
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} alignItems="center">
@@ -972,7 +972,7 @@ export default function SurveyPage() {
                         >
                           Kakao 로그인
                         </Button>
-        
+
                       </Stack>
                     </CardContent>
                     <CardActions sx={{ justifyContent: "space-between", px: 2, pb: 2 }}>
@@ -1148,17 +1148,36 @@ export default function SurveyPage() {
 
           {/* STEP 2 - 투표 (모바일은 스택: xs=12 / 데스크탑 2분할 md=6) */}
           {activeStep === 2 && (
-            <motion.div key="step-vote" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <motion.div
+              key="step-vote"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+            >
               <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
                 <Grid item xs={12}>
                   <Card variant="outlined" sx={{ borderColor: tone.border }}>
                     <CardHeader
-                      avatar={<HowToVoteIcon color="primary" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }} />}
+                      avatar={
+                        <HowToVoteIcon
+                          color="primary"
+                          sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }}
+                        />
+                      }
                       title={`3. 투표 (라운드 ${currentRoundIdx + 1}/${rounds.length || 0})`}
                       subheader="추천된 두 장소 중 선호하는 곳을 라운드별로 선택하세요"
-                      titleTypographyProps={{ fontWeight: 700, fontSize: { xs: "1.1rem", sm: "1.25rem", md: "1.5rem" } }}
-                      subheaderTypographyProps={{ fontSize: { xs: "0.75rem", sm: "0.85rem", md: "0.95rem" } }}
+                      titleTypographyProps={{
+                        fontWeight: 700,
+                        fontSize: { xs: "1.1rem", sm: "1.25rem", md: "1.5rem" },
+                      }}
+                      subheaderTypographyProps={{
+                        fontSize: { xs: "0.75rem", sm: "0.85rem", md: "0.95rem" },
+                      }}
                     />
+
+                    {/* 상단 버튼 */}
                     <CardActions sx={{ px: 2, pt: 0, flexWrap: "wrap", gap: 1 }}>
                       <Button
                         type="button"
@@ -1173,25 +1192,57 @@ export default function SurveyPage() {
                       </Button>
                       {isMobile && rounds.length > 0 && (
                         <Stack direction="row" spacing={0.5} sx={{ ml: "auto" }}>
-                          <IconButton size="small" disabled={currentRoundIdx === 0 || isAdvancing} onClick={() => setCurrentRoundIdx((i) => Math.max(0, i - 1))}>
+                          <IconButton
+                            size="small"
+                            disabled={currentRoundIdx === 0 || isAdvancing}
+                            onClick={() =>
+                              setCurrentRoundIdx((i) => Math.max(0, i - 1))
+                            }
+                          >
                             <ArrowBack fontSize="small" />
                           </IconButton>
-                          <IconButton size="small" disabled={currentRoundIdx >= rounds.length - 1 || isAdvancing} onClick={() => setCurrentRoundIdx((i) => Math.min((rounds.length - 1), i + 1))}>
+                          <IconButton
+                            size="small"
+                            disabled={
+                              currentRoundIdx >= rounds.length - 1 || isAdvancing
+                            }
+                            onClick={() =>
+                              setCurrentRoundIdx((i) =>
+                                Math.min(rounds.length - 1, i + 1)
+                              )
+                            }
+                          >
                             <ArrowForward fontSize="small" />
                           </IconButton>
                         </Stack>
                       )}
                     </CardActions>
 
+                    {/* 카드 본문 */}
                     <CardContent sx={{ pt: 0 }}>
                       {!rounds.length ? (
-                        <Alert severity="info" sx={{ fontSize: { xs: "0.8rem", sm: "0.9rem" } }}>추천을 준비하고 있어요… 잠시만요.</Alert>
+                        <Alert
+                          severity="info"
+                          sx={{ fontSize: { xs: "0.8rem", sm: "0.9rem" } }}
+                        >
+                          추천을 준비하고 있어요… 잠시만요.
+                        </Alert>
                       ) : (
                         <>
                           <AnimatePresence>
                             {selectedMessage && (
-                              <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}>
-                                <Alert severity="success" sx={{ my: 1.5, fontWeight: 700 }}>{selectedMessage}</Alert>
+                              <motion.div
+                                initial={{ opacity: 0, y: -6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -6 }}
+                                transition={{ duration: 0.25 }}
+                              >
+                                <Alert
+                                  severity="success"
+                                  sx={{ my: 1.5, fontWeight: 700 }}
+                                >
+                                  {selectedMessage}
+                                </Alert>
                               </motion.div>
                             )}
                           </AnimatePresence>
@@ -1204,8 +1255,18 @@ export default function SurveyPage() {
                                   <BigChoiceCard
                                     label="A"
                                     place={round?.primary}
-                                    selected={isSelected(currentRoundIdx, "primary", round?.primary?.name)}
-                                    onSelect={() => handleSelectAndAdvance(currentRoundIdx, "primary", round?.primary)}
+                                    selected={isSelected(
+                                      currentRoundIdx,
+                                      "primary",
+                                      round?.primary?.name
+                                    )}
+                                    onSelect={() =>
+                                      handleSelectAndAdvance(
+                                        currentRoundIdx,
+                                        "primary",
+                                        round?.primary
+                                      )
+                                    }
                                     compact={isMobile}
                                     disabled={isAdvancing}
                                   />
@@ -1214,8 +1275,18 @@ export default function SurveyPage() {
                                   <BigChoiceCard
                                     label="B"
                                     place={round?.alternative}
-                                    selected={isSelected(currentRoundIdx, "alternative", round?.alternative?.name)}
-                                    onSelect={() => handleSelectAndAdvance(currentRoundIdx, "alternative", round?.alternative)}
+                                    selected={isSelected(
+                                      currentRoundIdx,
+                                      "alternative",
+                                      round?.alternative?.name
+                                    )}
+                                    onSelect={() =>
+                                      handleSelectAndAdvance(
+                                        currentRoundIdx,
+                                        "alternative",
+                                        round?.alternative
+                                      )
+                                    }
                                     compact={isMobile}
                                     disabled={isAdvancing}
                                   />
@@ -1224,8 +1295,20 @@ export default function SurveyPage() {
                             );
                           })()}
 
-                          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
-                            <Typography variant="body1" sx={{ opacity: 0.8, fontSize: { xs: "0.8rem", sm: "0.9rem" } }}>
+                          {/* 라운드 하단 */}
+                          <Stack
+                            direction="row"
+                            justifyContent="space-between"
+                            alignItems="center"
+                            sx={{ mt: 2 }}
+                          >
+                            <Typography
+                              variant="body1"
+                              sx={{
+                                opacity: 0.8,
+                                fontSize: { xs: "0.8rem", sm: "0.9rem" },
+                              }}
+                            >
                               현재 선택:{" "}
                               {currentVotes[currentRoundIdx]?.choice
                                 ? `${currentVotes[currentRoundIdx].choice} · ${currentVotes[currentRoundIdx].item_name}`
@@ -1233,10 +1316,28 @@ export default function SurveyPage() {
                             </Typography>
                             {!isMobile && (
                               <Stack direction="row" spacing={1}>
-                                <Button type="button" startIcon={<ArrowBack />} disabled={currentRoundIdx === 0 || isAdvancing} onClick={() => setCurrentRoundIdx((i) => Math.max(0, i - 1))}>
+                                <Button
+                                  type="button"
+                                  startIcon={<ArrowBack />}
+                                  disabled={currentRoundIdx === 0 || isAdvancing}
+                                  onClick={() =>
+                                    setCurrentRoundIdx((i) => Math.max(0, i - 1))
+                                  }
+                                >
                                   이전 라운드
                                 </Button>
-                                <Button type="button" variant="outlined" onClick={() => setCurrentRoundIdx((i) => Math.min((rounds.length - 1), i + 1))} disabled={currentRoundIdx >= rounds.length - 1 || isAdvancing}>
+                                <Button
+                                  type="button"
+                                  variant="outlined"
+                                  onClick={() =>
+                                    setCurrentRoundIdx((i) =>
+                                      Math.min(rounds.length - 1, i + 1)
+                                    )
+                                  }
+                                  disabled={
+                                    currentRoundIdx >= rounds.length - 1 || isAdvancing
+                                  }
+                                >
                                   다음 라운드
                                 </Button>
                               </Stack>
@@ -1250,6 +1351,7 @@ export default function SurveyPage() {
               </Grid>
             </motion.div>
           )}
+
 
           {/* STEP 3 - ML 추천 */}
           {activeStep === 3 && (
