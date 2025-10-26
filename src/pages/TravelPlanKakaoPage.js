@@ -18,7 +18,7 @@ import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import ReplayIcon from "@mui/icons-material/Replay";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import TuneIcon from "@mui/icons-material/Tune";
+// import TuneIcon from "@mui/icons-material/Tune"; // 일정 옵션 UI 제거로 불필요
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
@@ -136,6 +136,10 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+/** 일정 옵션을 상수로만 사용 (UI 제거) */
+const AVG_STAY_MINS = 80;          // 평균 체류시간(분)
+const BUDGET_MINS_PER_DAY = 8 * 60; // 하루 예산(분)
+
 /** Component */
 export default function TravelPlanKakaoPage() {
   const navigate = useNavigate();
@@ -172,10 +176,20 @@ export default function TravelPlanKakaoPage() {
   const [dayRecords, setDayRecords] = useState([]);
   const [generating, setGenerating] = useState(false);
 
-  // 일정 옵션(수동/AI 공용)
-  const [avgStayMins, setAvgStayMins] = useState(80);
-  const [budgetMinsPerDay, setBudgetMinsPerDay] = useState(8 * 60);
-  const [addMeals, setAddMeals] = useState(true);
+  // 여행 날짜
+  const [startDate, setStartDate] = useState("");  // "YYYY-MM-DD"
+  const [endDate, setEndDate] = useState("");      // "YYYY-MM-DD"
+  const tripDays = useMemo(() => {
+    if (!startDate || !endDate) return 0;
+    const s = new Date(startDate);
+    const e = new Date(endDate);
+    const diff = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(0, diff);
+  }, [startDate, endDate]);
+  const dateError = useMemo(() => {
+    if (!startDate || !endDate) return "";
+    return new Date(endDate) < new Date(startDate) ? "종료일은 시작일 이후여야 합니다." : "";
+  }, [startDate, endDate]);
 
   // AI 상태
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -402,13 +416,13 @@ export default function TravelPlanKakaoPage() {
 
     let order = nearestOrder.map((i) => i);
 
-    // 간단한 예산 체크
+    // 간단한 예산 체크 (상수 사용)
     const totalLegKm = order.slice(0, -1).reduce((s, _, i) => s + haversineKm(pts[order[i]], pts[order[i + 1]]), 0);
     const moveMins = (totalLegKm / (mode === "walking" ? 4.5 : mode === "driving" ? 35 : 22)) * 60;
     const placeCount = order.length;
-    const totalMins = moveMins + placeCount * avgStayMins;
+    const totalMins = moveMins + placeCount * AVG_STAY_MINS;
     let final = order.slice();
-    if (totalMins > budgetMinsPerDay && placeCount >= 3) {
+    if (totalMins > BUDGET_MINS_PER_DAY && placeCount >= 3) {
       final = order.slice(0, order.length - 1);
       setToast({ open: true, msg: "하루 예산 초과로 방문지 1곳을 줄였습니다.", sev: "info" });
     }
@@ -476,16 +490,16 @@ export default function TravelPlanKakaoPage() {
   const totalDist = useMemo(() => (routeData?.segments || []).reduce((s, v) => s + (v.distance_km || 0), 0), [routeData]);
   const totalMins = useMemo(() => (routeData?.segments || []).reduce((s, v) => s + (v.duration_minutes || 0), 0), [routeData]);
 
-  /** ── AI 자동 코스: 담아온 관광지 + 일정옵션 포함 ── */
+  /** ── AI 자동 코스: 담아온 관광지 + 여행 날짜 반영 ── */
   const handleGenerateAIFromCaptured = async () => {
     try {
-      // 담아온 관광지(라우팅 state 우선), 없으면 로드된 places 전체 사용
       const baseList =
         Array.isArray(location.state?.spots) && location.state.spots.length
           ? location.state.spots.map((s) => ({ name: s.name, id: s.id || s._id }))
           : places.map((p) => ({ name: p.name, id: p.id }));
 
       if (baseList.length < 2) { alert("담아온(또는 로드된) 관광지가 2곳 이상이어야 합니다."); return; }
+      if (dateError) { alert(dateError); return; }
 
       setAiGenerating(true);
 
@@ -493,24 +507,22 @@ export default function TravelPlanKakaoPage() {
       const ids = (await getPlaceIds(names)) || baseList.map((b) => b.id).filter(Boolean);
       if (!ids.length) throw new Error("장소 ID를 확인할 수 없습니다.");
 
-      const travelDuration = Math.max(1, Math.ceil(ids.length / 3));
+      // 날짜 기반 일수, 없으면 장소 수로 추정
+      const estimatedBySpots = Math.max(1, Math.ceil(ids.length / 3));
+      const travelDuration = tripDays > 0 ? tripDays : estimatedBySpots;
+
       const transportModeMap = { transit: "TRANSIT", driving: "DRIVE", walking: "WALK" };
 
       const payload = {
         spots: ids,
         user_id: null,
         travelDuration,
+        travel_start_date: startDate || null,
+        travel_end_date: endDate || null,
         starting_point: ids[0],
         transport_mode: transportModeMap[mode] || "DRIVE",
         is_public: false,
-        description: "AI 자동 코스",
-        // 일정 옵션 전달 (백엔드에서 사용 시 키 매핑 필요)
-        planning_options: {
-          avg_stay_minutes: avgStayMins,
-          daily_budget_minutes: budgetMinsPerDay,
-          include_meals: !!addMeals,
-          prefer_mode: transportModeMap[mode] || "DRIVE",
-        },
+        description: "AI 자동 코스 (여행 날짜 기반)",
       };
 
       const resp = await fetch(`${API_BASE_URL}/api/v1/generate`, {
@@ -527,8 +539,6 @@ export default function TravelPlanKakaoPage() {
       if (!plan?.dailySchedule?.length) throw new Error("생성된 일정이 비어있습니다.");
 
       setAiPlan(plan);
-
-      // 1일차 지도로 표시
       await drawAIDayOnMap(0, plan);
     } catch (e) {
       console.error(e);
@@ -561,7 +571,7 @@ export default function TravelPlanKakaoPage() {
     }
   };
 
-  /** 작은 프레젠테이셔널 컴포넌트들 (파일 내부에 정의) */
+  /** 작은 프레젠테이셔널 컴포넌트들 */
   const PlaceItem = ({ place }) => {
     const selected = selectedNames.includes(place.name);
     return (
@@ -588,7 +598,7 @@ export default function TravelPlanKakaoPage() {
     );
   };
 
-  const PresetTile = ({ title, hint, icon, type }) => (
+  const PresetTile = ({ title, icon, type }) => (
     <Paper
       onClick={() => planningMode === "manual" && loadPresetCourse(type)}
       elevation={0}
@@ -599,10 +609,9 @@ export default function TravelPlanKakaoPage() {
         opacity: planningMode === "ai" ? 0.5 : 1,
       }}
     >
-      <Typography fontWeight={700} sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+      <Typography fontWeight={700} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         {icon} {title}
       </Typography>
-      <Typography variant="body2" color="text.secondary">{hint}</Typography>
     </Paper>
   );
 
@@ -651,7 +660,8 @@ export default function TravelPlanKakaoPage() {
               </ToggleButtonGroup>
               {planningMode === "ai" ? (
                 <Alert severity="info" sx={{ mt: 1 }}>
-                  AI 모드에서는 담아온/로드된 모든 관광지를 기반으로 <b>/generate</b>를 호출해 자동으로 일정을 짜요. 수동 선택/검색 UI는 숨겨집니다.
+                  AI 모드에서는 입력한 <b>여행 날짜</b>를 기준으로 <b>여행 일수</b>를 계산하고,
+                  담아온/로드된 관광지에서 적합한 코스를 추천합니다. (planning_options 미사용)
                 </Alert>
               ) : (
                 <Alert severity="info" sx={{ mt: 1 }}>
@@ -675,36 +685,69 @@ export default function TravelPlanKakaoPage() {
               </Select>
             </Paper>
 
-            {/* 일정 옵션 (수동/AI 공용) */}
+            {/* 여행 날짜 */}
             <Paper sx={{ p: 2, mb: 2 }}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                <Typography fontWeight={700}>⏱️ 일정 옵션</Typography>
-                <TuneIcon fontSize="small" />
+                <Typography fontWeight={700}>🗓️ 여행 날짜</Typography>
+                <Tooltip title="여행 기간을 입력하면 일수로 코스를 계산합니다. (AI 자동코스에 적용)">
+                  <InfoOutlinedIcon fontSize="small" sx={{ opacity: 0.6 }} />
+                </Tooltip>
               </Stack>
+
               <Stack spacing={1.2}>
-                <TextField type="number" size="small" label="평균 체류시간(분)" value={avgStayMins} onChange={(e)=>setAvgStayMins(Math.max(10, Number(e.target.value)||80))}/>
-                <TextField type="number" size="small" label="하루 예산(분)" value={budgetMinsPerDay} onChange={(e)=>setBudgetMinsPerDay(Math.max(120, Number(e.target.value)||480))}/>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Chip label={addMeals ? "식사추천 ON (AI에 반영)" : "식사추천 OFF"} color={addMeals ? "success" : "default"} onClick={()=>setAddMeals(v=>!v)} />
+                <TextField
+                  label="시작일"
+                  type="date"
+                  size="small"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                />
+                <TextField
+                  label="종료일"
+                  type="date"
+                  size="small"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  error={!!dateError}
+                  helperText={dateError || ' '}
+                  fullWidth
+                />
+
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip
+                    size="small"
+                    color={tripDays > 0 ? 'primary' : 'default'}
+                    label={tripDays > 0 ? `여행 ${tripDays}일` : '여행 일수 미설정'}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    (날짜가 없으면 장소 수 기준으로 일수를 추정합니다)
+                  </Typography>
                 </Stack>
               </Stack>
             </Paper>
 
+            {/* (일정 옵션 UI 제거됨) */}
+
             {/* ───────── 수동 모드 전용 UI ───────── */}
             {planningMode === "manual" && (
               <>
-                {/* 프리셋(수동에 도움) */}
+                {/* 프리셋 */}
                 <Box sx={{ mb: 2 }}>
                   <Typography fontWeight={700} sx={{ mb: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
                     ⭐ 추천 코스 (클릭하면 자동 선택)
                   </Typography>
-                  <PresetTile title="클래식 부산 1일 코스" hint="해운대 → 광안리 → 감천문화마을" icon={<BeachAccessIcon />} type="classic" />
-                  <PresetTile title="역사 문화 코스" hint="용두산공원 → 자갈치시장 → 태종대 (예시)" icon={<MuseumIcon />} type="history" />
-                  <PresetTile title="자연 힐링 코스" hint="태종대 → 이기대 → 송도해수욕장 (예시)" icon={<LandscapeIcon />} type="nature" />
-                  <PresetTile title="가족 여행 코스" hint="아쿠아리움 → 해운대 → 오륙도 (예시)" icon={<FamilyRestroomIcon />} type="family" />
+
+                  <PresetTile title="클래식 부산 1일 코스" icon={<BeachAccessIcon />} type="classic" />
+                  <PresetTile title="역사 문화 코스" icon={<MuseumIcon />} type="history" />
+                  <PresetTile title="자연 힐링 코스" icon={<LandscapeIcon />} type="nature" />
+                  <PresetTile title="가족 여행 코스" icon={<FamilyRestroomIcon />} type="family" />
                 </Box>
 
-                {/* 선택된 장소 (수동) */}
+
+                {/* 선택된 장소 */}
                 <Box sx={{ mb: 2 }}>
                   <Typography fontWeight={700} sx={{ mb: 1 }}>📍 선택된 장소 ({selectedNames.length}개)</Typography>
                   {selectedNames.length === 0 ? (<Alert severity="info" sx={{ mb: 1 }}>💡 최소 2개 이상의 장소를 선택해주세요</Alert>) : null}
@@ -719,7 +762,7 @@ export default function TravelPlanKakaoPage() {
                   </Paper>
                 </Box>
 
-                {/* 검색(수동) */}
+                {/* 검색 */}
                 <Paper sx={{ p: 1.5, mb: 2 }}>
                   <Stack direction="row" spacing={1}>
                     <TextField fullWidth size="small" placeholder="장소명을 입력 (예: 해운대)" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} InputProps={{ startAdornment: <SearchIcon sx={{ mr: 1, color: "text.secondary" }} /> }} />
@@ -781,7 +824,7 @@ export default function TravelPlanKakaoPage() {
                           <Typography variant="body2" sx={{ mb: 0.5 }}>{rec.names.map((n, i) => `${i + 1}. ${n}`).join("  ·  ")}</Typography>
                           {Array.isArray(rec.route?.segments) && (
                             <Typography variant="caption" color="text.secondary">
-                              총 {rec.route.segments.length}구간 · {Math.round((rec.route.segments||[]).reduce((s,v)=>s+(v.duration_minutes||0),0))}분 · {(rec.route.segments||[]).reduce((s,v)=>s+(v.distance_km||0),0).toFixed(1)}km
+                              총 {rec.route.segments.length}구간 · {Math.round((rec.route.segments || []).reduce((s, v) => s + (v.duration_minutes || 0), 0))}분 · {(rec.route.segments || []).reduce((s, v) => s + (v.distance_km || 0), 0).toFixed(1)}km
                             </Typography>
                           )}
                         </Paper>
@@ -799,15 +842,20 @@ export default function TravelPlanKakaoPage() {
                 <Box sx={{ mb: 2 }}>
                   <Button
                     fullWidth color="secondary" variant="contained" startIcon={<SmartToyIcon />}
-                    disabled={aiGenerating || !kakaoLoaded || (loadingPlaces && !(location.state?.spots?.length))}
+                    disabled={
+                      aiGenerating ||
+                      !kakaoLoaded ||
+                      (loadingPlaces && !(location.state?.spots?.length)) ||
+                      !!dateError
+                    }
                     onClick={handleGenerateAIFromCaptured}
                     sx={{ mb: 1, py: 1.2 }}
                   >
-                    {aiGenerating ? "AI 코스 생성 중…" : "AI로 자동코스 추천 (담아온 관광지 + 옵션 반영)"}
+                    {aiGenerating ? "AI 코스 생성 중…" : "AI로 자동코스 추천 (여행 날짜 반영)"}
                   </Button>
                 </Box>
 
-                {/* 🤖 AI 추천 일정 카드: '직접 코스' 모드에서는 보이지 않도록 조건부 렌더링 */}
+                {/* AI 추천 일정 카드 */}
                 {aiPlan?.dailySchedule?.length > 0 && (
                   <Box sx={{ mb: 2 }}>
                     <Typography fontWeight={700} sx={{ mb: 1 }}>🤖 AI 추천 일정</Typography>

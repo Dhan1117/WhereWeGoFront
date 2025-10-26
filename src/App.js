@@ -22,6 +22,7 @@ import { ItineraryProvider } from './contexts/ItineraryContext'; //
 import DetailedSurveyPage from './pages/DetailedSurveyPage';
 import FixedLayout from "./Layouts/FixedLayout";
 import TravelPlanKakaoPage from "./pages/TravelPlanKakaoPage";
+import FestivalGallery from './components/FestivalGallery';
 const theme = createTheme({
   palette: {
     primary: {

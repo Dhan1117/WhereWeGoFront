@@ -5,7 +5,7 @@ import AiPlannerBanner from '../components/AiPlannerBanner'
 import Footer from '../components/Footer';
 import './LandingPage.scss';
 import RecommendationGallery from '../components/RecommendationGallery';
-import TravelNewsBanner from '../components/TravelNewsBanner';
+import FestivalGallery from '../components/FestivalGallery';
 
 const LandingPage = () => {
   const theme = useTheme();
@@ -92,18 +92,18 @@ const LandingPage = () => {
       </Box>
       
       {/* 여행 소식 배너 영역 */}
-      <Box 
-        component="section"
-        sx={{
-          width: '100%',
-          maxWidth: '100%',
-          backgroundColor: '#fafafa',
-          py: { xs: 3, sm: 4, md: 5 },
-          overflowX: 'hidden'
-        }}
-      >
-        <TravelNewsBanner />
-      </Box>
+      <Box
+  component="section"
+  sx={{
+    width: '100%',
+    maxWidth: '100%',
+    backgroundColor: '#fafafa',
+    py: { xs: 3, sm: 4, md: 5 },
+    overflowX: 'hidden'
+  }}
+>
+  <FestivalGallery />
+</Box>
       
       <Footer />
     </Box>
