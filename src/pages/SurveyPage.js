@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { Loader } from "@googlemaps/js-api-loader";
 import {
   Alert, Box, Button, ButtonGroup, Card, CardActions, CardContent, CardHeader,
-  Chip, CircularProgress, Container, Divider, FormControl, Grid,
+  Chip, CircularProgress, LinearProgress, Container, Divider, FormControl, Grid,
   IconButton, InputLabel, MenuItem, Select, Snackbar,
   Stack, Stepper, Step, StepLabel, Tooltip, Typography,
   Skeleton, Badge, MobileStepper, Paper, useMediaQuery
@@ -24,11 +24,10 @@ import SendIcon from "@mui/icons-material/Send";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import PendingIcon from "@mui/icons-material/Pending";
 import PlaceIcon from "@mui/icons-material/Place";
-import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import { Search as SearchIcon, ArrowBack, ArrowForward } from "@mui/icons-material";
 import { AnimatePresence, motion } from "framer-motion";
 
-// ✅ UA 기반 감지
+// UA 기반 감지
 import { isMobile as isMobileUA, isAndroid, isIOS } from "react-device-detect";
 
 /* ==========================================================================
@@ -45,11 +44,11 @@ const GOOGLE_LOGIN_URL = `${API_BASE}/auth/google/login`;
 const KAKAO_LOGIN_URL = `${API_BASE}/auth/kakao/login`;
 const GMAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 
-// ⛳ 로컬 관리자 우회 플래그 키 (프론트 데모용)
+// 로컬 관리자 우회 플래그 키
 const BYPASS_KEY = "wwg_admin_bypass";
 
 /* ==========================================================================
-   팔레트 / 스타일 토큰
+   팔레트
    ========================================================================== */
 const tone = {
   primary: "#4338CA",
@@ -62,14 +61,13 @@ const tone = {
 };
 
 /* ==========================================================================
-   공용 유틸
+   유틸
    ========================================================================== */
 const toNum = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
 
-// ML 응답 한 항목을 공통 스키마로 정규화
 const normalizeMlSpot = (p, i = 0) => {
   const primaryId = p?.item_id || p?._id || p?.content_id || p?.id || p?.ml_index || (i + 1);
   return {
@@ -184,7 +182,7 @@ async function augmentRoundImages(rounds) {
   const service = new window.google.maps.places.PlacesService(mapDiv);
   const BUSAN_CENTER = { lat: 35.1796, lng: 129.0756 };
 
-  const next = rounds.map(r => ({
+  const next = rounds.map((r) => ({
     ...r,
     primary: r.primary ? { ...r.primary } : null,
     alternative: r.alternative ? { ...r.alternative } : null,
@@ -242,7 +240,8 @@ const pageVariants = {
 };
 const pageTransition = { type: "spring", stiffness: 260, damping: 24 };
 
-const steps = ["로그인", "설문", "투표", "AI 추천", "관리/테스트"];
+// 스텝: 로그인, 설문, 투표, AI 추천 (Step4/Step5 제거)
+const steps = ["로그인", "설문", "투표", "AI 추천"];
 
 const cardEnter = {
   hidden: { opacity: 0, scale: 0.96, y: 12 },
@@ -255,7 +254,7 @@ const selectedPulse = {
 };
 
 /* ==========================================================================
-   공용 컴포넌트 (반응형 UI 적용)
+   공용 컴포넌트
    ========================================================================== */
 const DetailTooltipTitle = (p) => (
   <Box sx={{ p: 0.5 }}>
@@ -309,7 +308,7 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
             aria-disabled={disabled}
             onKeyDown={(e) => !disabled && ((e.key === "Enter" || e.key === " ") && handleSelect())}
             variant="outlined"
-            onClick={handleSelect}   
+            onClick={handleSelect}
             sx={{
               outline: "none",
               borderWidth: 2,
@@ -344,7 +343,6 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
                   </Typography>
                 </Box>
 
-                {/* 상세보기 아이콘만 클릭 막음 */}
                 <Tooltip title={DetailTooltipTitle(place)} arrow placement="left" componentsProps={{ tooltip: { sx: { maxWidth: 320 } } }}>
                   <span>
                     <IconButton
@@ -360,7 +358,6 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
                 </Tooltip>
               </Stack>
 
-              {/* ✅ 이미지 박스도 클릭 */}
               <Box
                 onClick={handleSelect}
                 sx={{
@@ -378,7 +375,7 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
                     variant="rectangular"
                     width="100%"
                     height="100%"
-                    sx={{ position: "absolute", inset: 0, pointerEvents: "none" }} 
+                    sx={{ position: "absolute", inset: 0, pointerEvents: "none" }}
                   />
                 )}
                 <img
@@ -398,20 +395,39 @@ function BigChoiceCardInner({ label, place, selected, onSelect, compact = false,
     </Badge>
   );
 }
-
 const BigChoiceCard = React.memo(BigChoiceCardInner);
 
 /* ==========================================================================
-   메인 컴포넌트 (UI 조정 병합)
+   메인 컴포넌트
    ========================================================================== */
 export default function SurveyPage() {
   const navigate = useNavigate();
   const theme = useTheme();
+  // ML 자동 로딩 TIP/진행
+  const [mlLoading, setMlLoading] = useState(false);
+  const [mlProgress, setMlProgress] = useState(0);
+  const [mlTipIdx, setMlTipIdx] = useState(0);
 
-  // ✅ 화면폭 기반 감지 (깜빡임 방지: noSsr)
+  // 로딩 화면 TIP (제목은 "그거 아셨나요?"이지만, 본문 끝의 "…아셨나요?"는 제거)
+// 로딩 화면 TIP (부산 관광지 흥미로운 사실)
+const LOADING_TIPS = [
+  "감천문화마을은 색색의 집들이 산비탈에 늘어선 예술 마을로, ‘한국의 마추픽추’라 불립니다.",
+  "광안대교는 야간에 매일 다른 색의 경관 조명을 선보이며, 부산 야경 명소 1순위로 꼽힙니다.",
+  "해운대 해수욕장은 조선 시대부터 경승지로 기록되었고, 이름은 신라 학자 최치원의 호 ‘해운(海雲)’에서 유래했습니다.",
+  "자갈치시장은 한국 최대의 수산 시장 중 하나로, ‘오이소ㆍ보이소ㆍ사이소’ 사투리로 유명합니다.",
+  "태종대는 절벽 위 전망대에서 대한해협을 조망할 수 있고, 맑은 날엔 대마도도 보인다는 후기가 많습니다.",
+  "부산 영화의전당은 세계에서 가장 긴 ‘캔틸레버 지붕’으로 기네스 기록을 보유했습니다.",
+  "국제시장 골목은 6.25 전후 자연발생한 시장으로, 골목마다 테마가 달라 하루 코스로도 모자랍니다.",
+  "용궁사는 바다와 가장 가까운 사찰 중 하나로, 일출 명소로 특히 유명합니다.",
+  "송정 해수욕장은 ‘서핑 메카’로 급부상하여 초보자 강습 시설이 몰려 있습니다.",
+  "부산 현대미술관(MoCA)은 을숙도 철새도래지 근처에 있어 자연과 전시 관람을 함께 즐기기 좋습니다."
+];
+
+
+  // 화면폭 기반 감지 (깜빡임 방지: noSsr)
   const isViewportMobile = useMediaQuery(theme.breakpoints.down("sm"), { noSsr: true });
   const isDeviceMobile = isMobileUA || isAndroid || isIOS;
-  const finalIsMobile = useMemo(() => {
+  const isMobile = useMemo(() => {
     const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
     let v = isDeviceMobile || isViewportMobile;
     if (params.get("m") === "1") v = true;
@@ -419,14 +435,12 @@ export default function SurveyPage() {
     return v;
   }, [isViewportMobile, isDeviceMobile]);
 
-  const isMobile = finalIsMobile;
-
-  /* ------------------ UI/상태 ------------------ */
+  /* ------------------ 상태 ------------------ */
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "", severity: "info" });
   const [activeStep, setActiveStep] = useState(0);
 
-  // 로그인/설문 상태
+  // 로그인 상태
   const [loginStatus, setLoginStatus] = useState({
     user_id: "",
     logged_in: false,
@@ -435,7 +449,7 @@ export default function SurveyPage() {
     status: "",
   });
 
-  // 설문 입력
+  // 설문 입력 (원본 그대로 유지: 5개)
   const [activity, setActivity] = useState("");
   const [activityLevel, setActivityLevel] = useState("");
   const [time, setTime] = useState("");
@@ -447,10 +461,10 @@ export default function SurveyPage() {
   const [currentVotes, setCurrentVotes] = useState([]);
   const [mlRecs, setMlRecs] = useState([]);
 
-  // 라운드 UX
+  // 투표 UX
   const [currentRoundIdx, setCurrentRoundIdx] = useState(0);
   const [selectedMessage, setSelectedMessage] = useState("");
-  const [isAdvancing, setIsAdvancing] = useState(false); // 2초 대기 중 중복클릭 방지
+  const [isAdvancing, setIsAdvancing] = useState(false);
 
   useEffect(() => { (async () => { await handleCheckLogin(); })(); /* eslint-disable-next-line */ }, []);
 
@@ -458,25 +472,7 @@ export default function SurveyPage() {
   const closeToast = () => setToast((t) => ({ ...t, open: false }));
 
   /* ------------------ 로그인 ------------------ */
-  const adminBypassLogin = () => {
-    localStorage.setItem(BYPASS_KEY, "1");
-    const dummy = {
-      user_id: "dev-admin",
-      logged_in: true,
-      has_survey_data: false,
-      has_votes: false,
-      status: "bypass",
-    };
-    setLoginStatus(dummy);
-    setActiveStep(1);
-    showToast("관리자(로컬) 로그인 완료 — 백엔드 미사용", "success");
-  };
-  const continueWithoutLogin = () => {
-    const guest = { user_id: "guest", logged_in: false, has_survey_data: false, has_votes: false, status: "guest" };
-    setLoginStatus(guest);
-    setActiveStep(1);
-    showToast("로그인 없이 진행합니다.", "info");
-  };
+
 
   const handleCheckLogin = async () => {
     setLoading(true);
@@ -536,7 +532,7 @@ export default function SurveyPage() {
     try {
       const data = await apiCall(`${API_BASE}/survey/submit`, { method: "POST", body: surveyData });
       showToast(data?.message || "설문 제출 완료", "success");
-      setActiveStep(2); // 설문 후 투표로 이동
+      setActiveStep(2);
     } catch (e) {
       showToast(`설문 제출 실패: ${e.message}`, "error");
     } finally {
@@ -597,17 +593,13 @@ export default function SurveyPage() {
 
   useEffect(() => {
     if (activeStep === 2 && (placeRecs?.length ?? 0) === 0) handlePlaceRecs();
-  }, [activeStep]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeStep]); // eslint-disable-line
 
   const selectVote = (roundIndex, which, item) => {
     const choice = which === "primary" ? "option_a" : "option_b";
     setCurrentVotes((prev) => {
       const copy = [...prev];
-      copy[roundIndex] = {
-        round: roundIndex + 1,
-        choice,
-        item_name: item?.name || null,
-      };
+      copy[roundIndex] = { round: roundIndex + 1, choice, item_name: item?.name || null };
       return copy;
     });
   };
@@ -617,15 +609,13 @@ export default function SurveyPage() {
     selectVote(roundIdx, which, item);
     setSelectedMessage(`${item?.name || "선택 항목"}을(를) 고르셨습니다 ✅`);
     setIsAdvancing(true);
+
     setTimeout(() => {
       setSelectedMessage("");
       setIsAdvancing(false);
-      if (roundIdx < rounds.length - 1) {
-        setCurrentRoundIdx(roundIdx + 1);
-      } else {
-        showToast("마지막 라운드 선택 완료! '투표 제출'을 눌러주세요.", "info");
-      }
-    }, 2000);
+      if (roundIdx < rounds.length - 1) setCurrentRoundIdx(roundIdx + 1);
+      else showToast("마지막 라운드 선택 완료! '투표 제출'을 눌러주세요.", "info");
+    }, 1000);
   };
 
   const handleSubmitVotes = async () => {
@@ -635,9 +625,7 @@ export default function SurveyPage() {
     }
     const missing = [];
     for (let i = 0; i < rounds.length; i++) {
-      if (!currentVotes[i] || !currentVotes[i]?.choice || !currentVotes[i]?.item_name) {
-        missing.push(i + 1);
-      }
+      if (!currentVotes[i] || !currentVotes[i]?.choice || !currentVotes[i]?.item_name) missing.push(i + 1);
     }
     if (missing.length) {
       showToast(`라운드 ${missing.join(", ")}의 선택 정보가 누락되었어요. 다시 선택해 주세요.`, "warning");
@@ -652,10 +640,7 @@ export default function SurveyPage() {
 
     setLoading(true);
     try {
-      const resp = await apiCall(`${API_BASE}/survey/votes`, {
-        method: "POST",
-        body: { votes: payloadVotes },
-      });
+      const resp = await apiCall(`${API_BASE}/survey/votes`, { method: "POST", body: { votes: payloadVotes } });
       showToast(resp?.message ? `투표 제출 완료: ${resp.message}` : "투표 제출 완료", "success");
       try { await handleCheckLogin(); } catch { }
       setActiveStep(3);
@@ -666,176 +651,124 @@ export default function SurveyPage() {
     }
   };
 
-  /* ------------------ ML ------------------ */
-  const handleMLRecs = async () => {
+  /* ------------------ ML: 자동 로딩 → 자동 이동 ------------------ */
+  const handleMLRecs = async (autoNavigate = false) => {
     setLoading(true);
+    setMlLoading(true);
+    setMlProgress(0);
+
+    // 진행바/팁 회전 타이머
+const started = Date.now();
+const progTimer = setInterval(() => {
+  const elapsed = Date.now() - started;
+  // 12초 기준으로 부드럽게 올리고, 실제 응답 오면 100%로 마무리
+  const soft = Math.min(95, Math.round((elapsed / 12000) * 100));
+  setMlProgress((p) => (p < soft ? soft : p));
+}, 160); // frame 속도도 살짝 느리게
+
+const tipTimer = setInterval(() => {
+  setMlTipIdx((i) => (i + 1) % LOADING_TIPS.length);
+}, 4200);
+
     try {
       const uid = loginStatus?.user_id;
       if (!uid) {
-        showToast("user_id가 필요합니다. 먼저 로그인해 주세요.", "warning");
-        setLoading(false);
-        return;
+        throw new Error("user_id가 필요합니다. 먼저 로그인해 주세요.");
       }
-
-      const resp = await apiCall(
-        `${API_BASE}/survey/ml-recommendations?user_id=${encodeURIComponent(uid)}&k=20`
-      );
-
+      const resp = await apiCall(`${API_BASE}/survey/ml-recommendations?user_id=${encodeURIComponent(uid)}&k=20`);
       const raw = Array.isArray(resp?.recommendations) ? resp.recommendations : [];
       const normalized = raw.map((p, i) => normalizeMlSpot(p, i));
 
-      const loader = new Loader({
-        apiKey: GMAPS_KEY,
-        libraries: ["places"],
-        region: "KR",
-        language: "ko",
-      });
-      await loader.load();
-
-      const mapDiv = document.createElement("div");
-      const service = new window.google.maps.places.PlacesService(mapDiv);
-      const BUSAN_CENTER = { lat: 35.1796, lng: 129.0756 };
-
-      for (const spot of normalized) {
-        const hasImage =
-          spot.image &&
-          !/^data:image/i.test(spot.image) &&
-          !/placeholder/i.test(spot.image);
-        if (hasImage) continue;
-
-        const query = (spot.name || "").trim();
-        if (!query) continue;
-
-        const place = await new Promise((resolve) => {
-          service.textSearch(
-            {
-              query: `부산 ${query}`,
-              location: new window.google.maps.LatLng(BUSAN_CENTER.lat, BUSAN_CENTER.lng),
-              radius: 50000,
-              language: "ko",
-            },
-            (results) => resolve(Array.isArray(results) && results.length ? results[0] : null)
-          );
-        });
-
-        if (!place?.place_id) continue;
-
-        const details = await new Promise((resolve) => {
-          service.getDetails(
-            { placeId: place.place_id, language: "ko", fields: ["photos"] },
-            (d) => resolve(d || null)
-          );
-        });
-
-        const url = details?.photos?.[0]?.getUrl({ maxWidth: 1200, maxHeight: 900 });
-        if (url) spot.image = url;
+      // 맵 사진 보강 (옵션)
+      if (GMAPS_KEY) {
+        const loader = new Loader({ apiKey: GMAPS_KEY, libraries: ["places"], region: "KR", language: "ko" });
+        await loader.load();
+        const mapDiv = document.createElement("div");
+        const service = new window.google.maps.places.PlacesService(mapDiv);
+        const BUSAN_CENTER = { lat: 35.1796, lng: 129.0756 };
+        for (const spot of normalized) {
+          const hasImage = spot.image && !/^data:image/i.test(spot.image) && !/placeholder/i.test(spot.image);
+          if (hasImage) continue;
+          const query = (spot.name || "").trim();
+          if (!query) continue;
+          const place = await new Promise((resolve) => {
+            service.textSearch(
+              { query: `부산 ${query}`, location: new window.google.maps.LatLng(BUSAN_CENTER.lat, BUSAN_CENTER.lng), radius: 50000, language: "ko" },
+              (results) => resolve(Array.isArray(results) && results.length ? results[0] : null)
+            );
+          });
+          if (!place?.place_id) continue;
+          const details = await new Promise((resolve) => {
+            service.getDetails({ placeId: place.place_id, language: "ko", fields: ["photos"] }, (d) => resolve(d || null));
+          });
+          const url = details?.photos?.[0]?.getUrl({ maxWidth: 1200, maxHeight: 900 });
+          if (url) spot.image = url;
+        }
       }
 
       setMlRecs(normalized);
-      showToast(resp?.message || `AI 추천 완료 (${normalized.length}곳)`, "success");
+      setMlProgress(100);
+
+      if (autoNavigate) {
+        // 곧바로 추천 페이지로 이동
+        navigate("/tourist-spot-recommend", {
+          state: {
+            user_id: loginStatus?.user_id || "",
+            attractions: normalized.map((r, i) => ({
+              id: String(r.id || r.item_id || r._id || r.content_id || r.ml_index || i + 1),
+              name: r.name || r.item_name || "",
+              address: r.address || "",
+              lat: r.lat,
+              lng: r.lng,
+              image: r.image || "",
+              category_type: r.category_type || null,
+              category: r.category || "",
+              score: typeof r.ml_score === "number" ? r.ml_score : r.score ?? null,
+              reason: r.reason || "",
+            })),
+            isMlList: true,
+            source: "ml",
+          },
+        });
+      } else {
+        showToast(resp?.message || `AI 추천 완료 (${normalized.length}곳)`, "success");
+      }
     } catch (e) {
       showToast(`AI 추천 실패: ${e.message}`, "error");
     } finally {
+      clearInterval(progTimer);
+      clearInterval(tipTimer);
+      setMlLoading(false);
       setLoading(false);
     }
   };
 
-  const handleModelStatus = async () => {
-    setLoading(true);
-    try {
-      const resp = await apiCall(`${API_BASE}/survey/model-status`);
-      showToast(`ML 모델 상태: ${resp.model_loaded ? "로드됨" : "로드되지 않음"}`, "info");
-    } catch (e) {
-      showToast(`모델 상태 확인 실패: ${e.message}`, "error");
-    } finally {
-      setLoading(false);
+  // AI 추천 단계에 들어오면 자동 실행(로딩 TIP 화면 → 자동 이동)
+  useEffect(() => {
+    if (activeStep === 3) {
+      setMlTipIdx(Math.floor(Math.random() * LOADING_TIPS.length));
+      setMlProgress(0);
+      handleMLRecs(true); // 자동 내비게이트
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep]);
 
-  const goSpotRecommend = () => {
-    if (!mlRecs?.length) {
-      showToast("먼저 AI 추천을 받아주세요.", "warning");
-      return;
-    }
-
-    navigate("/tourist-spot-recommend", {
-      state: {
-        user_id: loginStatus?.user_id || "",
-        attractions: mlRecs.map((r, i) => ({
-          id: String(r.id || r.item_id || r._id || r.content_id || r.ml_index || i + 1),
-          name: r.name || r.item_name || "",
-          address: r.address || "",
-          lat: r.lat,
-          lng: r.lng,
-          image: r.image || "",
-          category_type: r.category_type || null,
-          category: r.category || "",
-          score: typeof r.ml_score === "number" ? r.ml_score : r.score ?? null,
-          reason: r.reason || "",
-        })),
-        isMlList: true,
-        source: "ml",
-      },
-    });
-  };
-
-  /* ------------------ 관리/테스트 ------------------ */
-  const handleResetAll = async () => {
-    if (!window.confirm("모든 설문/투표 데이터를 삭제하시겠습니까?")) return;
-    setLoading(true);
-    try {
-      const resp = await apiCall(`${API_BASE}/survey/reset`, { method: "DELETE" });
-      showToast(`데이터 초기화 완료: ${resp.message}`, "success");
-      setPlaceRecs([]); setCurrentVotes([]); setMlRecs([]);
-      await handleCheckLogin();
-      setActiveStep(loginStatus.logged_in ? 1 : 0);
-    } catch (e) {
-      showToast(`초기화 실패: ${e.message}`, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-  const handleTestGet = async () => {
-    setLoading(true);
-    try {
-      const resp = await apiCall(`${API_BASE}/survey/test`);
-      showToast(`GET 테스트 성공: ${JSON.stringify(resp)}`, "success");
-    } catch (e) {
-      showToast(`GET 테스트 실패: ${e.message}`, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-  const handleTestPost = async () => {
-    setLoading(true);
-    try {
-      const resp = await apiCall(`${API_BASE}/survey/test-post`, {
-        method: "POST", body: { test: "데이터", number: 123, array: [1, 2, 3] },
-      });
-      showToast(`POST 테스트 성공: ${JSON.stringify(resp)}`, "success");
-    } catch (e) {
-      showToast(`POST 테스트 실패: ${e.message}`, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* ------------------ 스텝 조절 ------------------ */
+  /* ------------------ 스텝 제어 ------------------ */
   const canGoNext = useMemo(() => {
     switch (activeStep) {
       case 0: return loginStatus.logged_in || loginStatus.status === "bypass" || loginStatus.status === "guest";
       case 1: return [activity, activityLevel, time, season, preference].every(Boolean);
       case 2: return rounds.length > 0 && currentVotes.filter(Boolean).length === rounds.length;
-      case 3: return mlRecs.length > 0;
+      case 3: return true; // 자동 진행
       default: return true;
     }
-  }, [activeStep, loginStatus, activity, activityLevel, time, season, preference, rounds, currentVotes, mlRecs]);
+  }, [activeStep, loginStatus, activity, activityLevel, time, season, preference, rounds, currentVotes]);
 
   const handleNext = () => setActiveStep((s) => Math.min(s + 1, steps.length - 1));
   const handleBack = () => setActiveStep((s) => Math.max(s - 1, 0));
 
   /* ======================================================================
-     헤더 + 스텝퍼 (모바일 UI 적용)
+     헤더 + 스텝퍼
      ====================================================================== */
   const Header = () => (
     <Paper
@@ -851,19 +784,8 @@ export default function SurveyPage() {
       <Container maxWidth="lg" sx={{ py: { xs: 1.5, sm: 2, md: 2.5 }, px: { xs: 1.5, sm: 2, md: 3 } }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
           <Box>
-            <Typography
-              variant="h4"
-              fontWeight={800}
-              color={tone.primary}
-              sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem", md: "2rem" } }}
-            >
+            <Typography variant="h4" fontWeight={800} color={tone.primary} sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem", md: "2rem" } }}>
               🗺️ WhereWeGo 설문 시스템
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{ opacity: 0.8, mt: 0.5, fontSize: { xs: "0.75rem", sm: "0.85rem", md: "1rem" }, display: { xs: "none", sm: "block" } }}
-            >
-
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} alignItems="center">
@@ -914,25 +836,14 @@ export default function SurveyPage() {
     </Container>
   );
 
-  /* ------------------ 렌더 ------------------ */
+  /* ======================================================================
+     렌더
+     ====================================================================== */
   return (
-    <Box
-      sx={{
-        bgcolor: tone.subtle,
-        minHeight: "100dvh",
-        width: { xs: "100vw", md: "100%" },
-        maxWidth: { xs: "96vw", md: "100vw" },
-        overflowX: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        margin: { xs: 0, md: "auto" },
-        boxSizing: "border-box",
-      }}
-    >
+    <Box sx={{ bgcolor: tone.subtle, minHeight: "100dvh", width: { xs: "100vw", md: "100%" }, overflowX: "hidden", display: "flex", flexDirection: "column" }}>
       <Header />
       <StepperBar />
 
-      {/* 본문 */}
       <Container maxWidth="lg" sx={{ flex: 1, py: { xs: 2, sm: 3, md: 4 }, px: { xs: 1.5, sm: 2, md: 3 } }}>
         <AnimatePresence mode="wait" initial={false}>
           {/* STEP 0 - 로그인 */}
@@ -959,52 +870,20 @@ export default function SurveyPage() {
                         </Alert>
                       )}
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                        <Button
-                          type="button"
-                          startIcon={<GoogleIcon />}
-                          variant="contained"
-                          color="primary"
-                          onClick={() => (window.location.href = GOOGLE_LOGIN_URL)}
-                          sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" }, py: { xs: 1, sm: 1.2 } }}
-                        >
+                        <Button startIcon={<GoogleIcon />} variant="contained" color="primary" onClick={() => (window.location.href = GOOGLE_LOGIN_URL)} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" }, py: { xs: 1, sm: 1.2 } }}>
                           Google 로그인
                         </Button>
-                        <Button
-                          type="button"
-                          startIcon={<ChatBubbleIcon />}
-                          variant="outlined"
-                          color="primary"
-                          onClick={() => (window.location.href = KAKAO_LOGIN_URL)}
-                          sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" }, py: { xs: 1, sm: 1.2 } }}
-                        >
+                        <Button startIcon={<ChatBubbleIcon />} variant="outlined" color="primary" onClick={() => (window.location.href = KAKAO_LOGIN_URL)} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" }, py: { xs: 1, sm: 1.2 } }}>
                           Kakao 로그인
                         </Button>
-
-                      </Stack>
+                         </Stack>
                     </CardContent>
                     <CardActions sx={{ justifyContent: "space-between", px: 2, pb: 2 }}>
                       <Stack direction="row" spacing={1}>
-                        <Button type="button" size={isMobile ? "small" : "medium"} onClick={handleCheckLogin} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                          상태 새로고침
-                        </Button>
-                        <Button
-                          type="button"
-                          size={isMobile ? "small" : "medium"}
-                          variant="contained"
-                          onClick={() => setActiveStep(1)}
-                          sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}
-                        >
-                          다음으로
-                        </Button>
+                        <Button onClick={handleCheckLogin} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>상태 새로고침</Button>
+                        <Button variant="contained" onClick={() => setActiveStep(1)} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>다음으로</Button>
                       </Stack>
-                      <Button
-                        type="button"
-                        size={isMobile ? "small" : "medium"}
-                        color="error"
-                        startIcon={<LogoutIcon />}
-                        onClick={handleLogout}
-                        sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}
-                      >
+                      <Button color="error" startIcon={<LogoutIcon />} onClick={handleLogout} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
                         로그아웃
                       </Button>
                     </CardActions>
@@ -1014,7 +893,7 @@ export default function SurveyPage() {
             </motion.div>
           )}
 
-          {/* STEP 1 - 설문 */}
+          {/* STEP 1 - 설문 (원본 5항목 유지) */}
           {activeStep === 1 && (
             <motion.div key="step-survey" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
               <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
@@ -1032,99 +911,49 @@ export default function SurveyPage() {
                         <Grid item xs={12} sm={6}>
                           <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                             <InputLabel>활동 유형</InputLabel>
-                            <Select
-                              label="활동 유형"
-                              value={activity}
-                              onChange={(e) => setActivity(e.target.value)}
-                              sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}
-                            >
+                            <Select label="활동 유형" value={activity} onChange={(e) => setActivity(e.target.value)} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>
                               <MenuItem value=""><em>선택</em></MenuItem>
-                              {["자연풍경", "자연산림", "관람및체험", "휴양", "테마거리", "예술감상", "공연관람", "트레킹"].map((v) => (
-                                <MenuItem key={v} value={v} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>{v}</MenuItem>
-                              ))}
+                              {["자연풍경", "자연산림", "관람및체험", "휴양", "테마거리", "예술감상", "공연관람", "트레킹"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
                             </Select>
                           </FormControl>
                         </Grid>
                         <Grid item xs={12} sm={6}>
                           <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                             <InputLabel>활동성</InputLabel>
-                            <Select
-                              label="활동성"
-                              value={activityLevel}
-                              onChange={(e) => setActivityLevel(e.target.value)}
-                              sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}
-                            >
+                            <Select label="활동성" value={activityLevel} onChange={(e) => setActivityLevel(e.target.value)} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>
                               <MenuItem value=""><em>선택</em></MenuItem>
-                              <MenuItem value="낮음" sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>낮음</MenuItem>
-                              <MenuItem value="보통" sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>보통</MenuItem>
-                              <MenuItem value="높음" sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>높음</MenuItem>
+                              <MenuItem value="낮음">낮음</MenuItem>
+                              <MenuItem value="보통">보통</MenuItem>
+                              <MenuItem value="높음">높음</MenuItem>
                             </Select>
                           </FormControl>
                         </Grid>
                         <Grid item xs={12} sm={6}>
                           <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                             <InputLabel>시간대</InputLabel>
-                            <Select
-                              label="시간대"
-                              value={time}
-                              onChange={(e) => setTime(e.target.value)}
-                              sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}
-                            >
+                            <Select label="시간대" value={time} onChange={(e) => setTime(e.target.value)} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>
                               <MenuItem value=""><em>선택</em></MenuItem>
-                              {["오전", "오후", "저녁", "밤"].map(v => (
-                                <MenuItem key={v} value={v} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>{v}</MenuItem>
-                              ))}
+                              {["오전", "오후", "저녁", "밤"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
                             </Select>
                           </FormControl>
                         </Grid>
                         <Grid item xs={12} sm={6}>
                           <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                             <InputLabel>계절</InputLabel>
-                            <Select
-                              label="계절"
-                              value={season}
-                              onChange={(e) => setSeason(e.target.value)}
-                              sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}
-                            >
+                            <Select label="계절" value={season} onChange={(e) => setSeason(e.target.value)} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>
                               <MenuItem value=""><em>선택</em></MenuItem>
-                              {["봄", "여름", "가을", "겨울"].map(v => (
-                                <MenuItem key={v} value={v} sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}>{v}</MenuItem>
-                              ))}
+                              {["봄", "여름", "가을", "겨울"].map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
                             </Select>
                           </FormControl>
                         </Grid>
                         <Grid item xs={12}>
-                          <Typography
-                            component="label"
-                            htmlFor="pref-toggle"
-                            sx={{ display: "block", mb: 0.75, fontWeight: 700, fontSize: { xs: "0.9rem", sm: "1rem" } }}
-                          >
+                          <Typography component="label" htmlFor="pref-toggle" sx={{ display: "block", mb: 0.75, fontWeight: 700 }}>
                             중요 요소
                           </Typography>
-
                           <ButtonGroup id="pref-toggle" fullWidth aria-label="중요 요소 선택">
-                            <Button
-                              onClick={() => setPreference("활동성")}
-                              variant={preference === "활동성" ? "contained" : "outlined"}
-                              color="primary"
-                              aria-pressed={preference === "활동성"}
-                              size={isMobile ? "small" : "medium"}
-                              sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}
-                            >
-                              활동성
-                            </Button>
-                            <Button
-                              onClick={() => setPreference("시간대")}
-                              variant={preference === "시간대" ? "contained" : "outlined"}
-                              color="primary"
-                              aria-pressed={preference === "시간대"}
-                              size={isMobile ? "small" : "medium"}
-                              sx={{ fontSize: { xs: "0.85rem", sm: "0.95rem" } }}
-                            >
-                              시간대
-                            </Button>
+                            <Button onClick={() => setPreference("활동성")} variant={preference === "활동성" ? "contained" : "outlined"}>활동성</Button>
+                            <Button onClick={() => setPreference("시간대")} variant={preference === "시간대" ? "contained" : "outlined"}>시간대</Button>
                           </ButtonGroup>
-
                           <Typography variant="caption" sx={{ display: "block", mt: 0.5, opacity: 0.7 }}>
                             버튼을 눌러 둘 중 하나를 선택하세요.
                           </Typography>
@@ -1132,19 +961,11 @@ export default function SurveyPage() {
                       </Grid>
                     </CardContent>
                     <CardActions sx={{ justifyContent: "space-between", px: 2, pb: 2 }}>
-                      <Button disabled={activeStep === 0} onClick={handleBack} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        뒤로
-                      </Button>
+                      <Button disabled={activeStep === 0} onClick={handleBack}>뒤로</Button>
                       <Stack direction="row" spacing={1} flexWrap="wrap" gap={0.5}>
-                        <Button onClick={handleSurveyStatus} startIcon={<PendingIcon />} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                          설문 상태
-                        </Button>
-                        <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                          설문 제출
-                        </Button>
-                        <Button variant="outlined" onClick={() => setActiveStep(2)} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                          다음
-                        </Button>
+                        <Button onClick={handleSurveyStatus} startIcon={<PendingIcon />}>설문 상태</Button>
+                        <Button onClick={handleSubmitSurvey} variant="contained" startIcon={<SendIcon />}>설문 제출</Button>
+                        <Button variant="outlined" onClick={() => setActiveStep(2)}>다음</Button>
                       </Stack>
                     </CardActions>
                   </Card>
@@ -1153,103 +974,43 @@ export default function SurveyPage() {
             </motion.div>
           )}
 
-          {/* STEP 2 - 투표 (모바일은 스택: xs=12 / 데스크탑 2분할 md=6) */}
+          {/* STEP 2 - 투표 */}
           {activeStep === 2 && (
-            <motion.div
-              key="step-vote"
-              variants={pageVariants}
-              initial="initial"
-              animate="in"
-              exit="out"
-              transition={pageTransition}
-            >
+            <motion.div key="step-vote" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
               <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
                 <Grid item xs={12}>
                   <Card variant="outlined" sx={{ borderColor: tone.border }}>
                     <CardHeader
-                      avatar={
-                        <HowToVoteIcon
-                          color="primary"
-                          sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }}
-                        />
-                      }
+                      avatar={<HowToVoteIcon color="primary" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }} />}
                       title={`3. 투표 (라운드 ${currentRoundIdx + 1}/${rounds.length || 0})`}
                       subheader="추천된 두 장소 중 선호하는 곳을 라운드별로 선택하세요"
-                      titleTypographyProps={{
-                        fontWeight: 700,
-                        fontSize: { xs: "1.1rem", sm: "1.25rem", md: "1.5rem" },
-                      }}
-                      subheaderTypographyProps={{
-                        fontSize: { xs: "0.75rem", sm: "0.85rem", md: "0.95rem" },
-                      }}
+                      titleTypographyProps={{ fontWeight: 700 }}
                     />
-
-                    {/* 상단 버튼 */}
                     <CardActions sx={{ px: 2, pt: 0, flexWrap: "wrap", gap: 1 }}>
-                      <Button
-                        type="button"
-                        onClick={handleSubmitVotes}
-                        variant="contained"
-                        startIcon={<HowToVoteIcon />}
-                        size={isMobile ? "small" : "medium"}
-                        sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}
-                        disabled={!rounds.length || isAdvancing}
-                      >
+                      <Button onClick={handleSubmitVotes} variant="contained" startIcon={<HowToVoteIcon />} disabled={!rounds.length || isAdvancing}>
                         투표 제출
                       </Button>
                       {isMobile && rounds.length > 0 && (
                         <Stack direction="row" spacing={0.5} sx={{ ml: "auto" }}>
-                          <IconButton
-                            size="small"
-                            disabled={currentRoundIdx === 0 || isAdvancing}
-                            onClick={() =>
-                              setCurrentRoundIdx((i) => Math.max(0, i - 1))
-                            }
-                          >
+                          <IconButton size="small" disabled={currentRoundIdx === 0 || isAdvancing} onClick={() => setCurrentRoundIdx((i) => Math.max(0, i - 1))}>
                             <ArrowBack fontSize="small" />
                           </IconButton>
-                          <IconButton
-                            size="small"
-                            disabled={
-                              currentRoundIdx >= rounds.length - 1 || isAdvancing
-                            }
-                            onClick={() =>
-                              setCurrentRoundIdx((i) =>
-                                Math.min(rounds.length - 1, i + 1)
-                              )
-                            }
-                          >
+                          <IconButton size="small" disabled={currentRoundIdx >= rounds.length - 1 || isAdvancing} onClick={() => setCurrentRoundIdx((i) => Math.min(rounds.length - 1, i + 1))}>
                             <ArrowForward fontSize="small" />
                           </IconButton>
                         </Stack>
                       )}
                     </CardActions>
 
-                    {/* 카드 본문 */}
                     <CardContent sx={{ pt: 0 }}>
                       {!rounds.length ? (
-                        <Alert
-                          severity="info"
-                          sx={{ fontSize: { xs: "0.8rem", sm: "0.9rem" } }}
-                        >
-                          추천을 준비하고 있어요… 잠시만요.
-                        </Alert>
+                        <Alert severity="info">추천을 준비하고 있어요… 잠시만요.</Alert>
                       ) : (
                         <>
                           <AnimatePresence>
                             {selectedMessage && (
-                              <motion.div
-                                initial={{ opacity: 0, y: -6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -6 }}
-                                transition={{ duration: 0.25 }}
-                              >
-                                <Alert
-                                  severity="success"
-                                  sx={{ my: 1.5, fontWeight: 700 }}
-                                >
-                                  {selectedMessage}
-                                </Alert>
+                              <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}>
+                                <Alert severity="success" sx={{ my: 1.5, fontWeight: 700 }}>{selectedMessage}</Alert>
                               </motion.div>
                             )}
                           </AnimatePresence>
@@ -1262,18 +1023,8 @@ export default function SurveyPage() {
                                   <BigChoiceCard
                                     label="A"
                                     place={round?.primary}
-                                    selected={isSelected(
-                                      currentRoundIdx,
-                                      "primary",
-                                      round?.primary?.name
-                                    )}
-                                    onSelect={() =>
-                                      handleSelectAndAdvance(
-                                        currentRoundIdx,
-                                        "primary",
-                                        round?.primary
-                                      )
-                                    }
+                                    selected={isSelected(currentRoundIdx, "primary", round?.primary?.name)}
+                                    onSelect={() => handleSelectAndAdvance(currentRoundIdx, "primary", round?.primary)}
                                     compact={isMobile}
                                     disabled={isAdvancing}
                                   />
@@ -1282,18 +1033,8 @@ export default function SurveyPage() {
                                   <BigChoiceCard
                                     label="B"
                                     place={round?.alternative}
-                                    selected={isSelected(
-                                      currentRoundIdx,
-                                      "alternative",
-                                      round?.alternative?.name
-                                    )}
-                                    onSelect={() =>
-                                      handleSelectAndAdvance(
-                                        currentRoundIdx,
-                                        "alternative",
-                                        round?.alternative
-                                      )
-                                    }
+                                    selected={isSelected(currentRoundIdx, "alternative", round?.alternative?.name)}
+                                    onSelect={() => handleSelectAndAdvance(currentRoundIdx, "alternative", round?.alternative)}
                                     compact={isMobile}
                                     disabled={isAdvancing}
                                   />
@@ -1302,49 +1043,17 @@ export default function SurveyPage() {
                             );
                           })()}
 
-                          {/* 라운드 하단 */}
-                          <Stack
-                            direction="row"
-                            justifyContent="space-between"
-                            alignItems="center"
-                            sx={{ mt: 2 }}
-                          >
-                            <Typography
-                              variant="body1"
-                              sx={{
-                                opacity: 0.8,
-                                fontSize: { xs: "0.8rem", sm: "0.9rem" },
-                              }}
-                            >
+                          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
+                            <Typography variant="body1" sx={{ opacity: 0.8 }}>
                               현재 선택:{" "}
-                              {currentVotes[currentRoundIdx]?.choice
-                                ? `${currentVotes[currentRoundIdx].choice} · ${currentVotes[currentRoundIdx].item_name}`
-                                : "없음"}
+                              {currentVotes[currentRoundIdx]?.choice ? `${currentVotes[currentRoundIdx].choice} · ${currentVotes[currentRoundIdx].item_name}` : "없음"}
                             </Typography>
                             {!isMobile && (
                               <Stack direction="row" spacing={1}>
-                                <Button
-                                  type="button"
-                                  startIcon={<ArrowBack />}
-                                  disabled={currentRoundIdx === 0 || isAdvancing}
-                                  onClick={() =>
-                                    setCurrentRoundIdx((i) => Math.max(0, i - 1))
-                                  }
-                                >
+                                <Button startIcon={<ArrowBack />} disabled={currentRoundIdx === 0 || isAdvancing} onClick={() => setCurrentRoundIdx((i) => Math.max(0, i - 1))}>
                                   이전 라운드
                                 </Button>
-                                <Button
-                                  type="button"
-                                  variant="outlined"
-                                  onClick={() =>
-                                    setCurrentRoundIdx((i) =>
-                                      Math.min(rounds.length - 1, i + 1)
-                                    )
-                                  }
-                                  disabled={
-                                    currentRoundIdx >= rounds.length - 1 || isAdvancing
-                                  }
-                                >
+                                <Button variant="outlined" disabled={currentRoundIdx >= rounds.length - 1 || isAdvancing} onClick={() => setCurrentRoundIdx((i) => Math.min(rounds.length - 1, i + 1))}>
                                   다음 라운드
                                 </Button>
                               </Stack>
@@ -1359,118 +1068,98 @@ export default function SurveyPage() {
             </motion.div>
           )}
 
-
-          {/* STEP 3 - ML 추천 */}
+          {/* STEP 3 - ML 추천: 자동 로딩 → 자동 이동 */}
           {activeStep === 3 && (
-            <motion.div key="step-ml" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
+            <motion.div
+              key="step-ml"
+              variants={pageVariants}
+              initial="initial"
+              animate="in"
+              exit="out"
+              transition={pageTransition}
+            >
               <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
                 <Grid item xs={12}>
                   <Card variant="outlined" sx={{ borderColor: tone.border }}>
                     <CardHeader
-                      avatar={<ScienceIcon color="primary" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }} />}
-                      title="4. AI 모델 추천"
-                      subheader="설문과 투표를 기반으로 추천"
-                      titleTypographyProps={{ fontWeight: 700, fontSize: { xs: "1.1rem", sm: "1.25rem", md: "1.5rem" } }}
-                      subheaderTypographyProps={{ fontSize: { xs: "0.75rem", sm: "0.85rem", md: "0.95rem" } }}
-                    />
-                    <CardActions sx={{ px: 2, pt: 0, flexWrap: "wrap", gap: 1 }}>
-                      <Button variant="outlined" onClick={handleMLRecs} startIcon={<ScienceIcon />} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        AI 추천 받기
-                      </Button>
-                      <Button variant="text" onClick={handleModelStatus} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        모델 상태 확인
-                      </Button>
-                      <Box sx={{ flexGrow: 1 }} />
-                      <Button onClick={handleBack} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        뒤로
-                      </Button>
-                      <Button disabled={!canGoNext} variant="outlined" onClick={handleNext} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        다음
-                      </Button>
-                    </CardActions>
-                    <CardContent sx={{ maxHeight: { xs: "50vh", sm: "60vh", md: 420 }, overflow: "auto" }}>
-                      {!mlRecs.length ? (
-                        <Alert severity="info" sx={{ fontSize: { xs: "0.8rem", sm: "0.9rem" } }}>
-                          아직 결과가 없습니다. "AI 추천 받기"를 눌러주세요.
-                        </Alert>
-                      ) : (
-                        <Stack spacing={1.5}>
-                          {mlRecs.map((p, i) => (
-                            <Box key={`${p.id || p.item_id || p._id || "rec"}-${i}`} sx={{ p: { xs: 1, sm: 1.25 }, border: `1px solid ${tone.border}`, borderRadius: 1.5, bgcolor: tone.paper }}>
-                              <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: { xs: "0.9rem", sm: "1rem" } }}>
-                                {i + 1}. {p.name || "(이름 없음)"}
-                              </Typography>
-                              <Typography variant="body2" sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                                📍 {p.address || "-"}
-                              </Typography>
-                              <Typography variant="body2" sx={{ opacity: 0.75, fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                                🏷️ {p.category || "-"}
-                              </Typography>
-                              <Typography variant="body2" sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                                📊 점수: {p.ml_score != null ? (typeof p.ml_score === "number" ? p.ml_score.toFixed(4) : p.ml_score) : "N/A"}
-                              </Typography>
-                              {p.category_type && (
-                                <Typography variant="body2" sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                                  🧩 분류: {p.category_type}
-                                </Typography>
-                              )}
-                              {!!p.reason && (
-                                <Typography variant="body2" sx={{ mt: 0.5, fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                                  🧠 추천 이유: {p.reason}
-                                </Typography>
-                              )}
-                            </Box>
-                          ))}
-                        </Stack>
-                      )}
-                    </CardContent>
-                    <CardActions sx={{ px: 2, pt: 0, justifyContent: "flex-end" }}>
-                      <Button variant="contained" onClick={goSpotRecommend} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.8rem", sm: "0.9rem" } }}>
-                        관광지 고르러 가기
-                      </Button>
-                    </CardActions>
+  avatar={<ScienceIcon color="primary" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }} />}
+  title="분석 중..."
+  subheader="맞춤형 부산 여행 추천을 생성하고 있습니다..."
+  titleTypographyProps={{
+    fontWeight: 900,
+    fontSize: { xs: "1.4rem", sm: "1.6rem", md: "1.8rem" },
+    color: tone.primary,
+  }}
+  subheaderTypographyProps={{
+    fontSize: { xs: "0.9rem", sm: "1rem" },
+    mt: 0.5,
+  }}
+/>
+<CardContent>
+  <Box
+    sx={{
+      p: { xs: 2, sm: 2.5 },
+      border: `1px solid ${tone.border}`,
+      borderRadius: 2,
+      bgcolor: tone.paper,
+    }}
+  >
+    {/* "알고 계셨나요?" 박스 */}
+    <Box
+      sx={{
+        p: { xs: 1.5, sm: 2 },
+        mb: 2,
+        borderRadius: 2,
+        bgcolor: "#F5F7FB",
+      }}
+    >
+      <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.5 }}>
+        알고 계셨나요?
+      </Typography>
+      <Typography
+        variant="body2"
+        sx={{ lineHeight: 1.7, color: "text.secondary" }}
+      >
+        {LOADING_TIPS[mlTipIdx]}
+      </Typography>
+    </Box>
+
+    {/* 진행 게이지 */}
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+      <Box sx={{ flex: 1 }}>
+        <LinearProgress variant="determinate" value={mlProgress} />
+      </Box>
+      <Typography variant="caption" sx={{ width: 38, textAlign: "right" }}>
+        {mlProgress}%
+      </Typography>
+    </Box>
+
+    <Typography variant="caption" sx={{ display: "block", mt: 1, opacity: 0.7 }}>
+      AI 추천 생성이 완료되면 자동으로 다음 화면으로 이동합니다.
+    </Typography>
+  </Box>
+
+  {/* 오류 시 재시도 버튼 (로직 동일) */}
+  {!mlLoading && mlProgress === 0 && (
+    <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+      <Button variant="contained" onClick={() => handleMLRecs(true)}>다시 시도</Button>
+      <Button variant="text" onClick={() => setActiveStep(2)}>투표로 돌아가기</Button>
+    </Stack>
+  )}
+</CardContent>
+
                   </Card>
                 </Grid>
               </Grid>
             </motion.div>
           )}
 
-          {/* STEP 4 - 관리/테스트 */}
-          {activeStep === 4 && (
-            <motion.div key="step-admin" variants={pageVariants} initial="initial" animate="in" exit="out" transition={pageTransition}>
-              <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
-                <Grid item xs={12}>
-                  <Card variant="outlined" sx={{ borderColor: tone.border }}>
-                    <CardHeader
-                      title="5. 관리 / 6. 테스트"
-                      titleTypographyProps={{ fontWeight: 700, fontSize: { xs: "1.1rem", sm: "1.25rem", md: "1.5rem" } }}
-                    />
-                    <CardActions sx={{ px: 2, pb: 2, flexWrap: "wrap", gap: 1 }}>
-                      <Button color="error" variant="outlined" startIcon={<RestartAltIcon />} onClick={handleResetAll} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        모든 데이터 초기화
-                      </Button>
-                      <Box sx={{ flexGrow: 1 }} />
-                      <Button variant="text" onClick={handleTestGet} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        GET 테스트
-                      </Button>
-                      <Button variant="text" onClick={handleTestPost} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        POST 테스트
-                      </Button>
-                      <Button onClick={handleBack} size={isMobile ? "small" : "medium"} sx={{ fontSize: { xs: "0.75rem", sm: "0.85rem" } }}>
-                        뒤로
-                      </Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              </Grid>
-            </motion.div>
-          )}
         </AnimatePresence>
       </Container>
 
-      {/* 공통 토스트 */}
+      {/* 토스트 */}
       <Snackbar open={toast.open} autoHideDuration={5000} onClose={closeToast} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-        <Alert onClose={closeToast} severity={toast.severity} sx={{ width: "100%", fontSize: { xs: "0.8rem", sm: "0.9rem" } }}>
+        <Alert onClose={closeToast} severity={toast.severity} sx={{ width: "100%" }}>
           <span style={{ whiteSpace: "pre-line" }}>{toast.message}</span>
         </Alert>
       </Snackbar>
